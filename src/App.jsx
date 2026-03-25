@@ -604,31 +604,6 @@ export default function App() {
     }
   });
 
-  // Save to localStorage whenever data changes
-  useEffect(() => { localStorage.setItem("nf_meals", JSON.stringify(meals)); }, [meals]);
-  useEffect(() => { localStorage.setItem("nf_workouts", JSON.stringify(workouts)); }, [workouts]);
-  useEffect(() => { localStorage.setItem("nf_injuries", JSON.stringify(injuries)); }, [injuries]);
-  useEffect(() => { localStorage.setItem("nf_supplements", JSON.stringify(supplements)); }, [supplements]);
-  useEffect(() => { localStorage.setItem("nf_exerciseLogs", JSON.stringify(exerciseLogs)); }, [exerciseLogs]);
-  useEffect(() => { localStorage.setItem("nf_profile", JSON.stringify(profile)); }, [profile]);
-  const [exerciseLogs, setExerciseLogs] = useState([
-    {
-      id: 1, date: "Today", sessionName: "Full Body",
-      exercises: [
-        { name: "Bicep Curl", sets: [{ reps: 12, weight: 15 }, { reps: 10, weight: 17.5 }, { reps: 8, weight: 20 }] },
-        { name: "Bench Press", sets: [{ reps: 10, weight: 60 }, { reps: 8, weight: 65 }] },
-      ],
-    },
-    {
-      id: 2, date: "Yesterday", sessionName: "Upper Body Push",
-      exercises: [
-        { name: "Bicep Curl", sets: [{ reps: 12, weight: 15 }, { reps: 10, weight: 15 }] },
-        { name: "Shoulder Press", sets: [{ reps: 10, weight: 30 }] },
-      ],
-    },
-  ]);
-  const [showExerciseLog, setShowExerciseLog] = useState(false);
-
   const totalCals = meals.reduce((s, m) => s + m.calories, 0);
   const totalProtein = meals.reduce((s, m) => s + m.protein, 0);
   const totalCarbs = meals.reduce((s, m) => s + m.carbs, 0);
@@ -659,6 +634,14 @@ export default function App() {
   const severityColor = { mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn };
   const statusColor = { new: COLORS.blue, stable: COLORS.mutedLight, improving: COLORS.accent, worsening: COLORS.warn };
 
+// Save to localStorage whenever data changes
+  useEffect(() => { localStorage.setItem("nf_meals", JSON.stringify(meals)); }, [meals]);
+  useEffect(() => { localStorage.setItem("nf_workouts", JSON.stringify(workouts)); }, [workouts]);
+  useEffect(() => { localStorage.setItem("nf_injuries", JSON.stringify(injuries)); }, [injuries]);
+  useEffect(() => { localStorage.setItem("nf_supplements", JSON.stringify(supplements)); }, [supplements]);
+  useEffect(() => { localStorage.setItem("nf_exerciseLogs", JSON.stringify(exerciseLogs)); }, [exerciseLogs]);
+  useEffect(() => { localStorage.setItem("nf_profile", JSON.stringify(profile)); }, [profile]);
+  
   return (
     <div style={{ background: COLORS.bg, minHeight: "100vh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: 480, margin: "0 auto", paddingBottom: 84 }}>
       <style>{`
