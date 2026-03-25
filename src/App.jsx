@@ -552,23 +552,65 @@ function ExerciseLogModal({ onClose, onAdd }) {
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [showScanner, setShowScanner] = useState(false);
   const [showWorkout, setShowWorkout] = useState(false);
   const [showInjury, setShowInjury] = useState(false);
-  const [meals, setMeals] = useState(SAMPLE_MEALS);
-  const [workouts, setWorkouts] = useState(WORKOUTS);
-  const [injuries, setInjuries] = useState(INJURIES);
-  const [supplements, setSupplements] = useState(DEFAULT_SUPPLEMENTS);
-  const [profile, setProfile] = useState({
-    name: "", age: "", gender: "male",
-    weight: "", weightUnit: "kg",
-    height: "", heightUnit: "cm",
-    goal: "maintain", activityLevel: "moderate",
-    cheatDays: 1,
+  const [showExerciseLog, setShowExerciseLog] = useState(false);
+
+  const [meals, setMeals] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_meals")) || SAMPLE_MEALS; }
+    catch { return SAMPLE_MEALS; }
   });
+
+  const [workouts, setWorkouts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_workouts")) || WORKOUTS; }
+    catch { return WORKOUTS; }
+  });
+
+  const [injuries, setInjuries] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_injuries")) || INJURIES; }
+    catch { return INJURIES; }
+  });
+
+  const [supplements, setSupplements] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_supplements")) || DEFAULT_SUPPLEMENTS; }
+    catch { return DEFAULT_SUPPLEMENTS; }
+  });
+
+  const [exerciseLogs, setExerciseLogs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_exerciseLogs")) || []; }
+    catch { return []; }
+  });
+
+  const [profile, setProfile] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("nf_profile")) || {
+        name: "", age: "", gender: "male",
+        weight: "", weightUnit: "kg",
+        height: "", heightUnit: "cm",
+        goal: "maintain", activityLevel: "moderate",
+        cheatDays: 1,
+      };
+    } catch {
+      return {
+        name: "", age: "", gender: "male",
+        weight: "", weightUnit: "kg",
+        height: "", heightUnit: "cm",
+        goal: "maintain", activityLevel: "moderate",
+        cheatDays: 1,
+      };
+    }
+  });
+
+  // Save to localStorage whenever data changes
+  useEffect(() => { localStorage.setItem("nf_meals", JSON.stringify(meals)); }, [meals]);
+  useEffect(() => { localStorage.setItem("nf_workouts", JSON.stringify(workouts)); }, [workouts]);
+  useEffect(() => { localStorage.setItem("nf_injuries", JSON.stringify(injuries)); }, [injuries]);
+  useEffect(() => { localStorage.setItem("nf_supplements", JSON.stringify(supplements)); }, [supplements]);
+  useEffect(() => { localStorage.setItem("nf_exerciseLogs", JSON.stringify(exerciseLogs)); }, [exerciseLogs]);
+  useEffect(() => { localStorage.setItem("nf_profile", JSON.stringify(profile)); }, [profile]);
   const [exerciseLogs, setExerciseLogs] = useState([
     {
       id: 1, date: "Today", sessionName: "Full Body",
@@ -924,7 +966,20 @@ export default function App() {
           <ProfilePage profile={profile} setProfile={setProfile} />
         )}
 
-      </div>
+      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+  <p style={{ margin: "0 0 12px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Data</p>
+  <button
+    onClick={() => {
+      if (window.confirm("Reset all app data? This cannot be undone.")) {
+        localStorage.clear();
+        window.location.reload();
+      }
+    }}
+    style={{ width: "100%", padding: "10px", background: COLORS.warn + "22", border: `1px solid ${COLORS.warn}`, borderRadius: 12, color: COLORS.warn, cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+  >
+    🗑️ Reset All Data
+  </button>
+</div>
 
       {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", padding: "10px 0 16px", backdropFilter: "blur(20px)" }}>
