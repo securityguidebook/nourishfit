@@ -174,7 +174,7 @@ function AIPhotoScanner({ onClose, onScan }) {
         {phase === "scanning" && (
           <div style={{ textAlign: "center", padding: 32 }}>
             {imagePreview && <img src={imagePreview} alt="preview" style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 12, marginBottom: 16 }} />}
-            <div style={{ fontSize: 14, color: COLORS.mutedLight }}>Analysing macronutrients…</div>
+            <div style={{ fontSize: 14, color: COLORS.mutedLight }}>Analysing macronutrients . . .</div>
           </div>
         )}
         {phase === "done" && result && (
@@ -337,11 +337,11 @@ function AICoach() {
             {m.content}
           </div>
         ))}
-        {loading && <div style={{ alignSelf: "flex-start", background: COLORS.card, borderRadius: "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, color: COLORS.muted, border: `1px solid ${COLORS.border}` }}>Thinking…</div>}
+        {loading && <div style={{ alignSelf: "flex-start", background: COLORS.card, borderRadius: "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, color: COLORS.muted, border: `1px solid ${COLORS.border}` }}>Thinking . . .</div>}
         <div ref={bottomRef} />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask your coach…" style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 13, outline: "none" }} />
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask your coach . . ." style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 13, outline: "none" }} />
         <button onClick={send} style={{ padding: "10px 16px", background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, cursor: "pointer" }}>↑</button>
       </div>
     </div>
