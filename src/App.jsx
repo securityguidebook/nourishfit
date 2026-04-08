@@ -28,35 +28,6 @@ const NAV = [
   { id: "profile", icon: "◉", label: "Profile" },
 ];
 
-function genHistory(rate = 0.8) {
-  return Array.from({ length: 28 }, (_, i) => ({ day: i, taken: Math.random() < rate }));
-}
-
-const DEFAULT_SUPPLEMENTS = [
-  { id: 1, name: "Fish Oil", dose: "2g", timing: "With breakfast", emoji: "🐟", color: COLORS.blue, category: "Omega-3", benefit: "Heart & brain health", history: genHistory(0.85) },
-  { id: 2, name: "Creatine", dose: "5g", timing: "Post-workout", emoji: "⚡", color: COLORS.accent, category: "Performance", benefit: "Strength & muscle", history: genHistory(0.9) },
-  { id: 3, name: "Vitamin C", dose: "1000mg", timing: "Morning", emoji: "🍊", color: COLORS.orange, category: "Vitamin", benefit: "Immune support", history: genHistory(0.75) },
-  { id: 4, name: "Extra Virgin Olive Oil", dose: "1 tbsp", timing: "With meals", emoji: "🫒", color: COLORS.yellow, category: "Healthy Fat", benefit: "Anti-inflammatory", history: genHistory(0.7) },
-  { id: 5, name: "Vitamin D3", dose: "2000 IU", timing: "Morning", emoji: "☀️", color: COLORS.yellow, category: "Vitamin", benefit: "Bone & immune health", history: genHistory(0.8) },
-  { id: 6, name: "Magnesium", dose: "400mg", timing: "Before bed", emoji: "🌙", color: COLORS.purple, category: "Mineral", benefit: "Sleep & recovery", history: genHistory(0.65) },
-];
-
-const SAMPLE_MEALS = [
-  { id: 1, name: "Grilled Chicken Bowl", time: "8:30 AM", calories: 520, protein: 42, carbs: 48, fat: 14, img: "🍗" },
-  { id: 2, name: "Protein Smoothie", time: "11:00 AM", calories: 310, protein: 28, carbs: 36, fat: 6, img: "🥤" },
-  { id: 3, name: "Salmon & Veggies", time: "1:30 PM", calories: 480, protein: 38, carbs: 22, fat: 22, img: "🐟" },
-];
-
-const WORKOUTS = [
-  { id: 1, type: "Strength", name: "Upper Body Push", duration: 52, calories: 340, sets: 18, date: "Today" },
-  { id: 2, type: "Cardio", name: "5K Morning Run", duration: 28, calories: 280, distance: "5.2km", date: "Yesterday" },
-  { id: 3, type: "Mobility", name: "Yoga Flow", duration: 40, calories: 120, date: "Mon" },
-];
-
-const INJURIES = [
-  { id: 1, area: "Left Knee", severity: "mild", status: "improving", note: "Slight pain on deep squats", date: "Mar 18" },
-  { id: 2, area: "Right Shoulder", severity: "moderate", status: "stable", note: "Rotator cuff tightness", date: "Mar 10" },
-];
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
@@ -205,24 +176,24 @@ function AIPhotoScanner({ onClose, onScan }) {
   );
 }
 
-// ─── Add Workout Modal ────────────────────────────────────────────────────────
+// ─── Quick Log Modal (cardio / manual entry) ──────────────────────────────────
 
-function AddWorkoutModal({ onClose, onAdd }) {
-  const [form, setForm] = useState({ type: "Strength", name: "", duration: "", calories: "", distance: "", sets: "" });
+function QuickLogModal({ onClose, onAdd }) {
+  const [form, setForm] = useState({ type: "Cardio", name: "", duration: "", calories: "", distance: "" });
   const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
   const handle = () => {
     if (!form.name.trim()) return;
-    onAdd({ id: Date.now(), type: form.type, name: form.name, duration: parseInt(form.duration)||0, calories: parseInt(form.calories)||0, ...(form.distance ? { distance: form.distance } : {}), ...(form.sets ? { sets: parseInt(form.sets) } : {}), date: "Today" });
+    onAdd({ id: Date.now(), type: form.type, name: form.name, duration: parseInt(form.duration) || 0, calories: parseInt(form.calories) || 0, ...(form.distance ? { distance: form.distance } : {}), date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) });
     onClose();
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Log Session</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Quick Log</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
-        {[["Workout Name", "name", "text"], ["Duration (min)", "duration", "number"], ["Calories Burned", "calories", "number"], ["Distance (optional)", "distance", "text"], ["Sets (optional)", "sets", "number"]].map(([label, key, type]) => (
+        {[["Activity Name", "name", "text"], ["Duration (min)", "duration", "number"], ["Calories Burned", "calories", "number"], ["Distance (optional)", "distance", "text"]].map(([label, key, type]) => (
           <div key={key} style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>{label}</label>
             <input type={type} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} style={inputStyle} />
@@ -231,10 +202,10 @@ function AddWorkoutModal({ onClose, onAdd }) {
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Type</label>
           <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} style={{ ...inputStyle }}>
-            {["Strength","Cardio","HIIT","Mobility","Sport","Other"].map(t => <option key={t} value={t}>{t}</option>)}
+            {["Cardio", "HIIT", "Mobility", "Sport", "Strength", "Other"].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        <button onClick={handle} style={{ width: "100%", padding: 13, background: COLORS.blue, border: "none", borderRadius: 14, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save Session</button>
+        <button onClick={handle} style={{ width: "100%", padding: 13, background: COLORS.blue, border: "none", borderRadius: 14, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save</button>
       </div>
     </div>
   );
@@ -247,7 +218,9 @@ function AddInjuryModal({ onClose, onAdd }) {
   const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
   const handle = () => {
     if (!form.area.trim()) return;
-    onAdd({ id: Date.now(), ...form, date: "Today" });
+    const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    const firstEntry = { date: dateStr, severity: form.severity, status: form.status, note: form.note };
+    onAdd({ id: Date.now(), area: form.area, severity: form.severity, status: form.status, note: form.note, date: dateStr, log: [firstEntry] });
     onClose();
   };
   return (
@@ -278,6 +251,218 @@ function AddInjuryModal({ onClose, onAdd }) {
           <input value={form.note} onChange={e => setForm(p => ({ ...p, note: e.target.value }))} style={inputStyle} placeholder="Brief description..." />
         </div>
         <button onClick={handle} style={{ width: "100%", padding: 13, background: COLORS.warn, border: "none", borderRadius: 14, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Update Injury Modal ──────────────────────────────────────────────────────
+
+const STATUS_ORDER = ["new", "worsening", "stable", "improving", "healed"];
+const STATUS_ICON = { new: "●", worsening: "▼", stable: "◆", improving: "▲", healed: "✓" };
+const STATUS_COLOR = { new: COLORS.blue, worsening: COLORS.warn, stable: COLORS.mutedLight, improving: COLORS.accent, healed: "#44cc88" };
+
+function UpdateInjuryModal({ injury, onClose, onUpdate }) {
+  const [severity, setSeverity] = useState(injury.severity);
+  const [status, setStatus] = useState(injury.status);
+  const [note, setNote] = useState("");
+  const log = injury.log || [];
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
+
+  const handle = () => {
+    const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    onUpdate({ ...injury, severity, status, note: note || injury.note, log: [...log, { date: dateStr, severity, status, note }] });
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{injury.area}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: COLORS.muted }}>First logged: {injury.date}</p>
+
+        {/* Progression timeline */}
+        {log.length > 0 && (
+          <div style={{ background: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
+            <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>Progression</div>
+            {log.map((entry, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, marginBottom: i < log.length - 1 ? 10 : 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: STATUS_COLOR[entry.status] + "33", border: `2px solid ${STATUS_COLOR[entry.status]}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: STATUS_COLOR[entry.status], fontWeight: 800 }}>{STATUS_ICON[entry.status]}</div>
+                  {i < log.length - 1 && <div style={{ width: 2, flex: 1, background: COLORS.border, margin: "3px 0" }} />}
+                </div>
+                <div style={{ paddingBottom: i < log.length - 1 ? 10 : 0 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center', marginBottom: 2" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLOR[entry.status] }}>{entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}</span>
+                    <Badge text={entry.severity} color={{ mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn }[entry.severity] || COLORS.muted} />
+                  </div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>{entry.date}</div>
+                  {entry.note && <div style={{ fontSize: 11, color: COLORS.mutedLight, fontStyle: "italic", marginTop: 2 }}>{entry.note}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Update form */}
+        <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>Log Update</div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Current Status</label>
+          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {STATUS_ORDER.map(s => (
+              <button key={s} onClick={() => setStatus(s)}
+                style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${status === s ? STATUS_COLOR[s] : COLORS.border}`, background: status === s ? STATUS_COLOR[s] + "22" : COLORS.bg, color: status === s ? STATUS_COLOR[s] : COLORS.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                {STATUS_ICON[s]} {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Severity</label>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {["mild","moderate","severe"].map(sv => (
+              <button key={sv} onClick={() => setSeverity(sv)}
+                style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: `1px solid ${severity === sv ? { mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn }[sv] : COLORS.border}`, background: severity === sv ? { mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn }[sv] + "22" : COLORS.bg, color: severity === sv ? { mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn }[sv] : COLORS.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                {sv.charAt(0).toUpperCase() + sv.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Note (optional)</label>
+          <input value={note} onChange={e => setNote(e.target.value)} style={inputStyle} placeholder="How does it feel today?" />
+        </div>
+        <button onClick={handle} style={{ width: "100%", padding: 13, background: STATUS_COLOR[status], border: "none", borderRadius: 14, color: status === "healed" || status === "improving" ? "#000" : "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+          Log Update
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Routine Day Modal ────────────────────────────────────────────────────────
+
+const ROUTINE_TYPES = ["Strength","Cardio","HIIT","Mobility","Sport","Rest","Other"];
+const ROUTINE_TYPE_COLOR = { Strength: COLORS.accent, Cardio: COLORS.blue, HIIT: COLORS.warn, Mobility: COLORS.yellow, Sport: COLORS.purple, Rest: COLORS.muted, Other: COLORS.mutedLight };
+
+function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTemplate, onClose, onSave }) {
+  const [name, setName] = useState(existing?.name || "");
+  const [type, setType] = useState(existing?.type || "Strength");
+  const [exercises, setExercises] = useState(existing?.exercises || []);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none" };
+  const smallInput = { ...inputStyle, padding: "6px 8px", fontSize: 12, textAlign: "center" };
+
+  const addExercise = () => setExercises(prev => [...prev, { id: Date.now(), name: "", sets: "3", reps: "10", weight: "" }]);
+  const updateEx = (id, field, val) => setExercises(prev => prev.map(e => e.id === id ? { ...e, [field]: val } : e));
+  const removeEx = (id) => setExercises(prev => prev.filter(e => e.id !== id));
+
+  const loadTemplate = (t) => { setName(t.name); setType(t.type); setExercises(t.exercises.map(e => ({ ...e, id: Date.now() + Math.random() }))); setShowTemplates(false); };
+
+  const handleSave = () => {
+    const validExercises = exercises.filter(e => e.name.trim());
+    onSave({ name: name.trim() || type, type, exercises: validExercises });
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{day} Plan</h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {templates?.length > 0 && <button onClick={() => setShowTemplates(!showTemplates)} style={{ padding: "5px 10px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.mutedLight, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Templates</button>}
+            <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+        </div>
+
+        {/* Template picker */}
+        {showTemplates && (
+          <div style={{ background: COLORS.bg, borderRadius: 12, padding: 10, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+            <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>Load Template</div>
+            {templates.map(t => (
+              <div key={t.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <button onClick={() => loadTemplate(t)} style={{ flex: 1, textAlign: "left", background: "none", border: "none", color: COLORS.text, fontSize: 13, cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontWeight: 700 }}>{t.name}</span>
+                  <span style={{ color: COLORS.muted, fontSize: 11 }}> · {t.type} · {(t.exercises || []).length} ex</span>
+                </button>
+                <button onClick={() => onDeleteTemplate(t.name)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 13, cursor: "pointer", padding: "0 4px" }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Activity Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} placeholder="e.g. Push Day, Morning Run, Rest..." />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Type</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {ROUTINE_TYPES.map(t => (
+              <button key={t} onClick={() => setType(t)}
+                style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${type === t ? ROUTINE_TYPE_COLOR[t] : COLORS.border}`, background: type === t ? ROUTINE_TYPE_COLOR[t] + "22" : COLORS.bg, color: type === t ? ROUTINE_TYPE_COLOR[t] : COLORS.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Exercises */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Exercises</label>
+            <button onClick={addExercise} style={{ padding: "5px 10px", background: COLORS.accent + "22", border: `1px solid ${COLORS.accent}`, borderRadius: 8, color: COLORS.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add</button>
+          </div>
+          {exercises.length === 0 && (
+            <div style={{ textAlign: "center", padding: "12px 0", color: COLORS.muted, fontSize: 12 }}>No exercises yet — tap + Add to build your plan</div>
+          )}
+          {exercises.map((ex, idx) => (
+            <div key={ex.id} style={{ background: COLORS.bg, borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, minWidth: 18 }}>{idx + 1}.</span>
+                <input value={ex.name} onChange={e => updateEx(ex.id, "name", e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Exercise name" />
+                <button onClick={() => removeEx(ex.id)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, textAlign: "center" }}>Sets</div>
+                  <input type="number" value={ex.sets} onChange={e => updateEx(ex.id, "sets", e.target.value)} style={smallInput} placeholder="3" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, textAlign: "center" }}>Reps</div>
+                  <input type="number" value={ex.reps} onChange={e => updateEx(ex.id, "reps", e.target.value)} style={smallInput} placeholder="10" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 3, textAlign: "center" }}>Weight (kg)</div>
+                  <input type="number" value={ex.weight} onChange={e => updateEx(ex.id, "weight", e.target.value)} style={smallInput} placeholder="—" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Save as template */}
+        {showSaveTemplate ? (
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input value={saveTemplateName} onChange={e => setSaveTemplateName(e.target.value)} placeholder="Template name..." style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={() => { if (saveTemplateName.trim()) { onSaveTemplate({ name: saveTemplateName.trim(), type, exercises: exercises.filter(e => e.name.trim()) }); setSaveTemplateName(""); setShowSaveTemplate(false); } }} style={{ padding: "8px 12px", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Save</button>
+            <button onClick={() => setShowSaveTemplate(false)} style={{ padding: "8px 10px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, fontSize: 12, cursor: "pointer" }}>✕</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowSaveTemplate(true)} style={{ width: "100%", padding: "8px 0", background: "transparent", border: `1px dashed ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 10 }}>
+            Save as Template
+          </button>
+        )}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          {existing && <button onClick={() => { onSave(null); onClose(); }} style={{ flex: 1, padding: 12, background: COLORS.warn + "22", border: `1px solid ${COLORS.warn}`, borderRadius: 14, color: COLORS.warn, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Clear Day</button>}
+          <button onClick={handleSave} style={{ flex: 2, padding: 13, background: ROUTINE_TYPE_COLOR[type], border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save</button>
+        </div>
       </div>
     </div>
   );
@@ -489,63 +674,359 @@ function ProfilePage({ profile, setProfile }) {
   );
 }
 
-// ─── Exercise Log Modal ───────────────────────────────────────────────────────
+// ─── Add Supplement Modal ─────────────────────────────────────────────────────
 
-function ExerciseLogModal({ onClose, onAdd }) {
-  const [sessionName, setSessionName] = useState("Full Body");
-  const [exercises, setExercises] = useState([{ name: "", sets: [{ reps: "", weight: "" }] }]);
-
-  const addExercise = () => setExercises(prev => [...prev, { name: "", sets: [{ reps: "", weight: "" }] }]);
-  const addSet = (eIdx) => setExercises(prev => prev.map((ex, i) => i === eIdx ? { ...ex, sets: [...ex.sets, { reps: "", weight: "" }] } : ex));
-  const updateExercise = (eIdx, field, val) => setExercises(prev => prev.map((ex, i) => i === eIdx ? { ...ex, [field]: val } : ex));
-  const updateSet = (eIdx, sIdx, field, val) => setExercises(prev => prev.map((ex, i) => i === eIdx ? { ...ex, sets: ex.sets.map((s, j) => j === sIdx ? { ...s, [field]: val } : s) } : ex));
-  const removeExercise = (eIdx) => setExercises(prev => prev.filter((_, i) => i !== eIdx));
-
-  const handleSave = () => {
-    const valid = exercises.filter(e => e.name.trim());
-    if (!valid.length) return;
-    onAdd({ id: Date.now(), date: "Today", sessionName, exercises: valid.map(e => ({ ...e, sets: e.sets.filter(s => s.reps || s.weight).map(s => ({ reps: parseInt(s.reps) || 0, weight: parseFloat(s.weight) || 0 })) })) });
+function AddSupplementModal({ onClose, onAdd }) {
+  const EMOJI_OPTIONS = ["💊","🍊","🐟","⚡","☀️","🌙","🧴","🫒","🧬","🌿","🍋","🫐","🥩","🧪","💪"];
+  const COLOR_OPTIONS = [COLORS.blue, COLORS.accent, COLORS.yellow, COLORS.orange, COLORS.purple, COLORS.warn];
+  const [form, setForm] = useState({ name: "", emoji: "💊", dose: "", timing: "Morning", category: "Vitamin", color: COLORS.blue, benefit: "" });
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
+  const handle = () => {
+    if (!form.name.trim()) return;
+    onAdd({ id: Date.now(), ...form, history: {} });
     onClose();
   };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Add Supplement</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Icon</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {EMOJI_OPTIONS.map(e => (
+              <button key={e} onClick={() => setForm(p => ({ ...p, emoji: e }))}
+                style={{ width: 38, height: 38, borderRadius: 9, border: `2px solid ${form.emoji === e ? COLORS.accent : COLORS.border}`, background: form.emoji === e ? COLORS.accentDim : COLORS.bg, fontSize: 18, cursor: "pointer" }}>{e}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Name</label>
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} style={inputStyle} placeholder="e.g. Creatine" />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Dose</label>
+          <input value={form.dose} onChange={e => setForm(p => ({ ...p, dose: e.target.value }))} style={inputStyle} placeholder="e.g. 5g, 2000mg, 1 capsule" />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Timing</label>
+          <select value={form.timing} onChange={e => setForm(p => ({ ...p, timing: e.target.value }))} style={{ ...inputStyle }}>
+            {["Morning","Pre-workout","Post-workout","With breakfast","With meals","Before bed","Throughout day"].map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Category</label>
+          <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} style={{ ...inputStyle }}>
+            {["Vitamin","Mineral","Protein","Performance","Omega-3","Healthy Fat","Herb","Probiotic","Other"].map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Colour</label>
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            {COLOR_OPTIONS.map(c => (
+              <button key={c} onClick={() => setForm(p => ({ ...p, color: c }))}
+                style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: `3px solid ${form.color === c ? COLORS.text : "transparent"}`, cursor: "pointer" }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Benefit (optional)</label>
+          <input value={form.benefit} onChange={e => setForm(p => ({ ...p, benefit: e.target.value }))} style={inputStyle} placeholder="e.g. Strength & muscle" />
+        </div>
+        <button onClick={handle} style={{ width: "100%", padding: 13, background: form.name.trim() ? COLORS.accent : COLORS.border, border: "none", borderRadius: 14, color: form.name.trim() ? "#000" : COLORS.muted, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Add Supplement</button>
+      </div>
+    </div>
+  );
+}
 
-  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 10px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none" };
+// ─── Manual Meal Modal ────────────────────────────────────────────────────────
 
+function ManualMealModal({ onClose, onAdd }) {
+  const EMOJI_OPTIONS = ["🍗","🥩","🐟","🥗","🍝","🥣","🥤","🍳","🥙","🍱","🫐","🍎","🥑","🍌","🍽️"];
+  const [form, setForm] = useState({ name: "", img: "🍽️", calories: "", protein: "", carbs: "", fat: "" });
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
+  const handle = () => {
+    if (!form.name.trim() || !form.calories) return;
+    onAdd({ id: Date.now(), name: form.name, img: form.img, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), calories: parseInt(form.calories) || 0, protein: parseInt(form.protein) || 0, carbs: parseInt(form.carbs) || 0, fat: parseInt(form.fat) || 0 });
+    onClose();
+  };
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Workout Session</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Log Meal Manually</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Session Name</label>
-          <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} placeholder="e.g. Full Body, Push Day..." />
-        </div>
-        {exercises.map((ex, eIdx) => (
-          <div key={eIdx} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${COLORS.border}` }}>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-              <input value={ex.name} onChange={e => updateExercise(eIdx, "name", e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Exercise name (e.g. Bicep Curl)" />
-              {exercises.length > 1 && (
-                <button onClick={() => removeExercise(eIdx)} style={{ background: COLORS.warn + "22", border: "none", color: COLORS.warn, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
-              )}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", gap: 6, marginBottom: 6 }}>
-              <span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Reps</span>
-              <span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Weight (kg)</span>
-              <span />
-            </div>
-            {ex.sets.map((s, sIdx) => (
-              <div key={sIdx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", gap: 6, marginBottom: 6 }}>
-                <input value={s.reps} onChange={e => updateSet(eIdx, sIdx, "reps", e.target.value)} style={inputStyle} placeholder="12" type="number" />
-                <input value={s.weight} onChange={e => updateSet(eIdx, sIdx, "weight", e.target.value)} style={inputStyle} placeholder="20" type="number" />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>S{sIdx + 1}</div>
-              </div>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Icon</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {EMOJI_OPTIONS.map(e => (
+              <button key={e} onClick={() => setForm(p => ({ ...p, img: e }))}
+                style={{ width: 38, height: 38, borderRadius: 9, border: `2px solid ${form.img === e ? COLORS.accent : COLORS.border}`, background: form.img === e ? COLORS.accentDim : COLORS.bg, fontSize: 18, cursor: "pointer" }}>{e}</button>
             ))}
-            <button onClick={() => addSet(eIdx)} style={{ background: COLORS.accentDim, border: "none", color: COLORS.accent, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700, marginTop: 4 }}>+ Add Set</button>
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Meal Name</label>
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} style={inputStyle} placeholder="e.g. Grilled Chicken" />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Calories (kcal)</label>
+          <input type="number" value={form.calories} onChange={e => setForm(p => ({ ...p, calories: e.target.value }))} style={inputStyle} placeholder="e.g. 450" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+          {[["Protein (g)", "protein"], ["Carbs (g)", "carbs"], ["Fat (g)", "fat"]].map(([label, key]) => (
+            <div key={key}>
+              <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>{label}</label>
+              <input type="number" value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} style={{ ...inputStyle, marginTop: 0 }} placeholder="0" />
+            </div>
+          ))}
+        </div>
+        <button onClick={handle} style={{ width: "100%", padding: 13, background: (form.name.trim() && form.calories) ? COLORS.accent : COLORS.border, border: "none", borderRadius: 14, color: (form.name.trim() && form.calories) ? "#000" : COLORS.muted, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Log Meal</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Active Workout Session ───────────────────────────────────────────────────
+// Driven by App-level session state so the timer persists across tab switches.
+
+function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, resting, onFinish, onClose }) {
+  const [showSummary, setShowSummary] = useState(false);
+  const [allDonePrompt, setAllDonePrompt] = useState(false);
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const estCals = Math.round((sessionElapsed / 3600) * 4.5 * (session.userWeightKg || 70));
+
+  const updateEx = (idx, updater) => setSession(s => ({ ...s, exercises: s.exercises.map((e, i) => i === idx ? updater(e) : e) }));
+  const addExercise = () => setSession(s => ({ ...s, exercises: [...s.exercises, { name: "", sets: [], collapsed: false }] }));
+  const removeExercise = idx => setSession(s => ({ ...s, exercises: s.exercises.filter((_, i) => i !== idx) }));
+
+  const addSet = idx => {
+    const ex = session.exercises[idx];
+    const last = ex.sets[ex.sets.length - 1];
+    updateEx(idx, e => ({ ...e, sets: [...e.sets, { id: Date.now(), reps: last?.reps || "", weight: last?.weight || "", done: false }] }));
+  };
+  const updateSetField = (exIdx, setId, field, val) => updateEx(exIdx, e => ({ ...e, sets: e.sets.map(s => s.id === setId ? { ...s, [field]: val } : s) }));
+
+  const completeSet = (exIdx, setId) => {
+    const ex = session.exercises[exIdx];
+    const updatedSets = ex.sets.map(s => s.id === setId ? { ...s, done: true } : s);
+    const allDone = updatedSets.every(s => s.done) && updatedSets.length > 0;
+    setSession(s => ({
+      ...s,
+      restStartedAt: Date.now(),
+      exercises: s.exercises.map((e, i) => i === exIdx ? { ...e, sets: updatedSets, collapsed: allDone } : e),
+    }));
+    if (allDone) {
+      const rest = session.exercises.filter((_, i) => i !== exIdx);
+      if (rest.every(e => e.collapsed || (e.sets.length > 0 && e.sets.every(s => s.done)))) {
+        setTimeout(() => setAllDonePrompt(true), 600);
+      }
+    }
+  };
+
+  const skipRest = () => setSession(s => ({ ...s, restStartedAt: null }));
+  const addRestTime = extra => setSession(s => ({ ...s, restStartedAt: s.restStartedAt ? s.restStartedAt - extra * 1000 : null }));
+
+  const validExercises = session.exercises
+    .filter(e => e.name.trim() && e.sets.some(s => s.done))
+    .map(e => ({ name: e.name, sets: e.sets.filter(s => s.done).map(s => ({ reps: s.reps, weight: s.weight })) }));
+  const totalSets = validExercises.reduce((a, e) => a + e.sets.length, 0);
+  const durationMin = Math.max(1, Math.round(sessionElapsed / 60));
+
+  const cellInput = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 6px", color: COLORS.text, fontSize: 13, textAlign: "center", outline: "none", width: "100%" };
+
+  if (showSummary) return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "92vh", overflowY: "auto" }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Session Complete 🏁</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+          {[{ l: "Duration", v: `${durationMin}m`, c: COLORS.blue }, { l: "Est. Calories", v: `${estCals} kcal`, c: COLORS.yellow }, { l: "Exercises", v: validExercises.length, c: COLORS.accent }, { l: "Total Sets", v: totalSets, c: COLORS.purple }].map(x => (
+            <div key={x.l} style={{ background: COLORS.card, borderRadius: 12, padding: 14, border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: x.c, fontFamily: "'Space Mono',monospace" }}>{x.v}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>{x.l}</div>
+            </div>
+          ))}
+        </div>
+        {validExercises.map((e, i) => (
+          <div key={i} style={{ background: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.accent, marginBottom: 6 }}>{e.name}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {e.sets.map((s, j) => (
+                <div key={j} style={{ background: COLORS.bg, borderRadius: 6, padding: "3px 9px", fontSize: 11, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>
+                  <span style={{ color: COLORS.muted }}>S{j+1} </span>{s.reps}<span style={{ color: COLORS.muted }}>×</span><span style={{ color: COLORS.yellow }}>{s.weight}kg</span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
-        <button onClick={addExercise} style={{ width: "100%", padding: "10px", background: COLORS.bg, border: `1px dashed ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 14 }}>+ Add Exercise</button>
-        <button onClick={handleSave} style={{ width: "100%", padding: "13px", background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save Session</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={() => setShowSummary(false)} style={{ flex: 1, padding: 12, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 14, color: COLORS.muted, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Back</button>
+          <button onClick={() => onFinish({ durationMin, estCals, validExercises, totalSets })} style={{ flex: 2, padding: 13, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save Session</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "92vh", overflowY: "auto" }}>
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div>
+            <input value={session.sessionName} onChange={e => setSession(s => ({ ...s, sessionName: e.target.value }))} placeholder="Session name..."
+              style={{ background: "transparent", border: "none", color: COLORS.text, fontSize: 15, fontWeight: 800, outline: "none", fontFamily: "'Space Mono',monospace", width: 210, marginBottom: 4 }} />
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 26, fontWeight: 800, color: COLORS.accent }}>{fmt(sessionElapsed)}</span>
+              <span style={{ fontSize: 13, color: COLORS.yellow }}>🔥 {estCals} kcal</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button onClick={onClose} style={{ padding: "8px 10px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>— Min</button>
+            <button onClick={() => setShowSummary(true)} style={{ padding: "8px 12px", background: COLORS.warn, border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Finish</button>
+          </div>
+        </div>
+
+        {/* Rest preset row */}
+        <div style={{ display: "flex", gap: 5, marginBottom: 14, alignItems: "center" }}>
+          <span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, whiteSpace: "nowrap" }}>REST:</span>
+          {[30, 60, 90, 120, 180].map(s => (
+            <button key={s} onClick={() => setSession(sess => ({ ...sess, restTotal: s }))}
+              style={{ flex: 1, padding: "5px 0", borderRadius: 7, border: `1px solid ${session.restTotal === s ? COLORS.blue : COLORS.border}`, background: session.restTotal === s ? COLORS.blue + "22" : "transparent", color: session.restTotal === s ? COLORS.blue : COLORS.muted, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              {s < 60 ? `${s}s` : `${s / 60}m`}
+            </button>
+          ))}
+        </div>
+
+        {/* Rest Timer */}
+        {resting && (
+          <div style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 14, border: `2px solid ${COLORS.blue}`, textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: COLORS.blue, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Rest</div>
+            <div style={{ fontSize: 44, fontWeight: 800, color: COLORS.text, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>{fmt(restLeft)}</div>
+            <div style={{ height: 3, background: COLORS.border, borderRadius: 99, margin: "10px 0", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(restLeft / session.restTotal) * 100}%`, background: COLORS.blue, borderRadius: 99, transition: "width 1s linear" }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button onClick={() => addRestTime(30)} style={{ padding: "6px 12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.mutedLight, fontSize: 12, cursor: "pointer" }}>+30s</button>
+              <button onClick={skipRest} style={{ padding: "6px 16px", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 8, color: COLORS.accent, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Skip →</button>
+            </div>
+          </div>
+        )}
+
+        {/* All-done prompt */}
+        {allDonePrompt && (
+          <div style={{ background: COLORS.accent + "18", border: `1px solid ${COLORS.accent}55`, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.accent, marginBottom: 8 }}>All sets complete! 🎉</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button onClick={() => setAllDonePrompt(false)} style={{ padding: "8px 16px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Keep Going</button>
+              <button onClick={() => setShowSummary(true)} style={{ padding: "8px 18px", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Finish Session</button>
+            </div>
+          </div>
+        )}
+
+        {/* Exercises */}
+        {session.exercises.map((ex, idx) => {
+          const nextIdx = ex.sets.findIndex(s => !s.done);
+
+          if (ex.collapsed) {
+            return (
+              <div key={idx} style={{ background: COLORS.card, borderRadius: 14, padding: 12, marginBottom: 10, border: `1px solid ${COLORS.accent}44` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ color: COLORS.accent, fontSize: 14 }}>✓</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{ex.name}</span>
+                  </div>
+                  <button onClick={() => updateEx(idx, e => ({ ...e, collapsed: false }))} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: "2px 6px" }}>Edit</button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {ex.sets.map((s, j) => (
+                    <div key={j} style={{ background: COLORS.accentDim, borderRadius: 6, padding: "3px 9px", fontSize: 11, color: COLORS.accent, fontFamily: "'Space Mono',monospace", border: `1px solid ${COLORS.accentMid}` }}>
+                      S{j+1} {s.reps}×{s.weight}kg
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={idx} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
+                <input value={ex.name} onChange={e => updateEx(idx, ex => ({ ...ex, name: e.target.value }))}
+                  style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 10px", color: COLORS.text, fontSize: 13, flex: 1, outline: "none", fontWeight: 700 }} placeholder="Exercise name..." />
+                {session.exercises.length > 1 && <button onClick={() => removeExercise(idx)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}>✕</button>}
+              </div>
+
+              {ex.sets.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px", gap: 6, marginBottom: 4 }}>
+                    <div /><div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textAlign: "center" }}>REPS</div>
+                    <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textAlign: "center" }}>KG</div><div />
+                  </div>
+                  {ex.sets.map((set, si) => {
+                    const isActive = si === nextIdx;
+                    const isDone = set.done;
+                    const isLocked = !isDone && !isActive;
+                    return (
+                      <div key={set.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                        <div style={{ fontSize: 10, color: isDone ? COLORS.accent : COLORS.muted, fontWeight: 700, textAlign: "center" }}>S{si+1}</div>
+                        <input type="number" value={set.reps} onChange={e => updateSetField(idx, set.id, "reps", e.target.value)} disabled={isDone}
+                          style={{ ...cellInput, border: `1px solid ${isDone ? COLORS.accent + "44" : COLORS.border}`, color: isDone ? COLORS.muted : COLORS.text, opacity: isLocked ? 0.45 : 1 }} placeholder="—" />
+                        <input type="number" value={set.weight} onChange={e => updateSetField(idx, set.id, "weight", e.target.value)} disabled={isDone}
+                          style={{ ...cellInput, border: `1px solid ${isDone ? COLORS.accent + "44" : COLORS.border}`, color: isDone ? COLORS.muted : COLORS.text, opacity: isLocked ? 0.45 : 1 }} placeholder="—" />
+                        <button disabled={!isActive} onClick={() => isActive && completeSet(idx, set.id)}
+                          style={{ width: 32, height: 32, borderRadius: 8, border: `2px solid ${isDone ? COLORS.accent : isActive ? COLORS.accent : COLORS.border}`, background: isDone ? COLORS.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: isActive ? "pointer" : "default", opacity: isLocked ? 0.3 : 1 }}>
+                          {isDone && <span style={{ color: "#000", fontSize: 14, fontWeight: 900 }}>✓</span>}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button onClick={() => addSet(idx)}
+                style={{ width: "100%", padding: "7px 0", background: "transparent", border: `1px dashed ${COLORS.border}`, borderRadius: 8, color: COLORS.mutedLight, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                + Add Set
+              </button>
+            </div>
+          );
+        })}
+        <button onClick={addExercise} style={{ width: "100%", padding: 10, background: COLORS.bg, border: `1px dashed ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>+ Add Exercise</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Session Start Prompt ─────────────────────────────────────────────────────
+function SessionStartPrompt({ todayRoutine, onUseRoutine, onFresh, onClose }) {
+  const typeColor = ROUTINE_TYPE_COLOR[todayRoutine.type] || COLORS.accent;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Start Session</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ background: typeColor + "18", border: `1px solid ${typeColor}44`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: typeColor, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Today&apos;s Routine</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, marginBottom: 8 }}>{todayRoutine.name}</div>
+          {(todayRoutine.exercises || []).map((e, i) => (
+            <div key={i} style={{ fontSize: 12, color: COLORS.mutedLight, marginBottom: 3, display: "flex", gap: 6 }}>
+              <span style={{ color: typeColor }}>·</span>
+              <span>{e.name}{(e.sets || e.reps) ? ` — ${[e.sets && `${e.sets} sets`, e.reps && `${e.reps} reps`, e.weight && `@ ${e.weight}kg`].filter(Boolean).join(", ")}` : ""}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={onUseRoutine}
+          style={{ width: "100%", padding: 13, background: typeColor, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer", marginBottom: 8 }}>
+          Use Today&apos;s Routine
+        </button>
+        <button onClick={onFresh}
+          style={{ width: "100%", padding: 12, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 14, color: COLORS.mutedLight, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          Start Fresh
+        </button>
       </div>
     </div>
   );
@@ -554,34 +1035,46 @@ function ExerciseLogModal({ onClose, onAdd }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("dashboard");
+  const [viewMode, setViewMode] = useState("mobile"); // "mobile" | "webapp"
   const [showScanner, setShowScanner] = useState(false);
-  const [showWorkout, setShowWorkout] = useState(false);
+  const [showActiveWorkout, setShowActiveWorkout] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
   const [showInjury, setShowInjury] = useState(false);
-  const [showExerciseLog, setShowExerciseLog] = useState(false);
+  const [showManualMeal, setShowManualMeal] = useState(false);
+  const [showAddSupp, setShowAddSupp] = useState(false);
+  const [editingInjury, setEditingInjury] = useState(null);
+  const [routineDay, setRoutineDay] = useState(null); // { key, label }
+  const [routineChecks, setRoutineChecks] = useState(() => JSON.parse(localStorage.getItem("routineChecks") || "{}"));
+  const [routineTemplates, setRoutineTemplates] = useState(() => JSON.parse(localStorage.getItem("nf_templates") || "[]"));
+  const [showSessionStart, setShowSessionStart] = useState(false);
+
+  // App-level workout session (persists across tab changes)
+  const [activeSession, setActiveSession] = useState(null);
+  const [, setSessionTick] = useState(0);
 
   const [meals, setMeals] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_meals")) || SAMPLE_MEALS; }
-    catch { return SAMPLE_MEALS; }
+    try { return JSON.parse(localStorage.getItem("nf_meals")) || []; }
+    catch { return []; }
   });
 
   const [workouts, setWorkouts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_workouts")) || WORKOUTS; }
-    catch { return WORKOUTS; }
+    try { return JSON.parse(localStorage.getItem("nf_workouts")) || []; }
+    catch { return []; }
   });
 
   const [injuries, setInjuries] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_injuries")) || INJURIES; }
-    catch { return INJURIES; }
+    try { return JSON.parse(localStorage.getItem("nf_injuries")) || []; }
+    catch { return []; }
   });
 
   const [supplements, setSupplements] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_supplements")) || DEFAULT_SUPPLEMENTS; }
-    catch { return DEFAULT_SUPPLEMENTS; }
+    try { return JSON.parse(localStorage.getItem("nf_supplements")) || []; }
+    catch { return []; }
   });
 
-  const [exerciseLogs, setExerciseLogs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_exerciseLogs")) || []; }
-    catch { return []; }
+  const [weeklyRoutine, setWeeklyRoutine] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_routine")) || {}; }
+    catch { return {}; }
   });
 
   const [profile, setProfile] = useState(() => {
@@ -629,21 +1122,73 @@ export default function App() {
   const cheatDayCalories = Math.round(calorieGoal * 1.25);
   const weeklyCalBudget = calorieGoal * (7 - profile.cheatDays) + cheatDayCalories * profile.cheatDays;
 
-  const suppsTakenToday = supplements.filter(s => s.history[s.history.length - 1]?.taken).length;
+  const userWeightKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
+  const todayKey = new Date().toISOString().slice(0, 10); // "2026-04-08"
+  const DAYS_MAP = [{ key: "sun", label: "Sun" }, { key: "mon", label: "Mon" }, { key: "tue", label: "Tue" }, { key: "wed", label: "Wed" }, { key: "thu", label: "Thu" }, { key: "fri", label: "Fri" }, { key: "sat", label: "Sat" }];
+  const todayDayKey = DAYS_MAP[new Date().getDay()].key;
+  const todayRoutine = weeklyRoutine[todayDayKey];
+
+  // Session timer — ticks every second while a session is active, auto-clears expired rest
+  useEffect(() => {
+    if (!activeSession) return;
+    const id = setInterval(() => {
+      setSessionTick(t => t + 1);
+      setActiveSession(s => {
+        if (!s?.restStartedAt) return s;
+        if ((Date.now() - s.restStartedAt) / 1000 >= s.restTotal) return { ...s, restStartedAt: null };
+        return s;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [!!activeSession]);
+
+  const sessionElapsed = activeSession ? Math.floor((Date.now() - activeSession.startTime) / 1000) : 0;
+  const restLeft = activeSession?.restStartedAt
+    ? Math.max(0, activeSession.restTotal - Math.floor((Date.now() - activeSession.restStartedAt) / 1000))
+    : 0;
+  const resting = !!(activeSession?.restStartedAt && restLeft > 0);
+
+  const startActiveSession = (routineExercises = null, sessionName = "", sessionType = "Strength") => {
+    const exercises = routineExercises
+      ? routineExercises.map(e => ({
+          name: e.name,
+          collapsed: false,
+          sets: Array.from({ length: parseInt(e.sets) || 3 }, (_, i) => ({
+            id: Date.now() + i * 13,
+            reps: e.reps || "",
+            weight: e.weight || "",
+            done: false,
+          })),
+        }))
+      : [{ name: "", sets: [], collapsed: false }];
+    setActiveSession({ startTime: Date.now(), sessionName, sessionType, exercises, restTotal: 90, restStartedAt: null, userWeightKg });
+    setShowActiveWorkout(true);
+  };
+  const handleFinishSession = ({ durationMin, estCals, validExercises, totalSets }) => {
+    setWorkouts(prev => [{ id: Date.now(), type: activeSession.sessionType || "Strength", name: activeSession.sessionName || "Workout Session", duration: durationMin, calories: estCals, sets: totalSets, date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), exercises: validExercises }, ...prev]);
+    setActiveSession(null);
+    setShowActiveWorkout(false);
+  };
+  const suppsTakenToday = supplements.filter(s => s.history?.[todayKey]).length;
   const workoutTypeColor = { Strength: COLORS.accent, Cardio: COLORS.blue, HIIT: COLORS.warn, Mobility: COLORS.yellow, Sport: COLORS.purple, Other: COLORS.mutedLight };
   const severityColor = { mild: COLORS.yellow, moderate: COLORS.orange, severe: COLORS.warn };
   const statusColor = { new: COLORS.blue, stable: COLORS.mutedLight, improving: COLORS.accent, worsening: COLORS.warn };
 
-// Save to localStorage whenever data changes
+  // Save to localStorage whenever data changes
   useEffect(() => { localStorage.setItem("nf_meals", JSON.stringify(meals)); }, [meals]);
   useEffect(() => { localStorage.setItem("nf_workouts", JSON.stringify(workouts)); }, [workouts]);
   useEffect(() => { localStorage.setItem("nf_injuries", JSON.stringify(injuries)); }, [injuries]);
   useEffect(() => { localStorage.setItem("nf_supplements", JSON.stringify(supplements)); }, [supplements]);
-  useEffect(() => { localStorage.setItem("nf_exerciseLogs", JSON.stringify(exerciseLogs)); }, [exerciseLogs]);
   useEffect(() => { localStorage.setItem("nf_profile", JSON.stringify(profile)); }, [profile]);
+  useEffect(() => { localStorage.setItem("nf_routine", JSON.stringify(weeklyRoutine)); }, [weeklyRoutine]);
+  useEffect(() => { localStorage.setItem("routineChecks", JSON.stringify(routineChecks)); }, [routineChecks]);
+  useEffect(() => { localStorage.setItem("nf_templates", JSON.stringify(routineTemplates)); }, [routineTemplates]);
   
+  const maxW = viewMode === "webapp" ? 960 : 480;
+  const fmtSec = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: 480, margin: "0 auto", paddingBottom: 84 }}>
+    <div style={{ background: COLORS.bg, minHeight: "100vh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: 84 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; }
@@ -660,13 +1205,31 @@ export default function App() {
             {profile.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Good morning 👋"}
           </div>
         </div>
-        <div style={{ width: 42, height: 42, borderRadius: "50%", background: COLORS.accentDim, border: `2px solid ${COLORS.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer" }} onClick={() => setTab("profile")}>
-          {profile.gender === "female" ? "👩" : "🧑"}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setViewMode(v => v === "mobile" ? "webapp" : "mobile")}
+            style={{ fontSize: 10, padding: "4px 9px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 7, color: COLORS.muted, cursor: "pointer", fontWeight: 700 }}>
+            {viewMode === "mobile" ? "⊞ Web" : "📱 Mobile"}
+          </button>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: COLORS.accentDim, border: `2px solid ${COLORS.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer" }} onClick={() => setTab("profile")}>
+            {profile.gender === "female" ? "👩" : "🧑"}
+          </div>
         </div>
       </div>
 
+      {/* Active session banner */}
+      {activeSession && !showActiveWorkout && (
+        <div onClick={() => setShowActiveWorkout(true)}
+          style={{ margin: "12px 20px 0", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.accent }} />
+            <span style={{ fontSize: 12, color: COLORS.accent, fontWeight: 700 }}>Session in progress</span>
+          </div>
+          <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 14, fontWeight: 800, color: COLORS.accent }}>{fmtSec(sessionElapsed)}</span>
+        </div>
+      )}
+
       {/* Tab Content */}
-      <div style={{ padding: "16px 20px 0" }}>
+      <div style={{ padding: "16px 20px 0", minHeight: "calc(100vh - 168px)" }}>
 
         {/* ── DASHBOARD ── */}
         {tab === "dashboard" && (
@@ -687,6 +1250,37 @@ export default function App() {
               ))}
             </div>
 
+            {/* Today's Routine */}
+            {todayRoutine && (() => {
+              const exs = todayRoutine.exercises || [];
+              const checkKey = `${todayDayKey}_${todayKey}`;
+              const done = routineChecks[checkKey] || [];
+              const doneCount = exs.filter(e => done.includes(e.id)).length;
+              return (
+                <div onClick={() => setTab("workout")} style={{ background: ROUTINE_TYPE_COLOR[todayRoutine.type] + "18", border: `1px solid ${ROUTINE_TYPE_COLOR[todayRoutine.type]}44`, borderRadius: 14, padding: "12px 16px", marginBottom: 14, cursor: "pointer" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: exs.length ? 8 : 0 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: ROUTINE_TYPE_COLOR[todayRoutine.type], fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Today&apos;s Plan</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>{todayRoutine.name}</div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                      <Badge text={todayRoutine.type} color={ROUTINE_TYPE_COLOR[todayRoutine.type]} />
+                      {exs.length > 0 && <span style={{ fontSize: 10, color: COLORS.muted }}>{doneCount}/{exs.length} done</span>}
+                    </div>
+                  </div>
+                  {exs.length > 0 && (
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {exs.map(e => (
+                        <span key={e.id} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: done.includes(e.id) ? ROUTINE_TYPE_COLOR[todayRoutine.type] + "44" : COLORS.card, color: done.includes(e.id) ? ROUTINE_TYPE_COLOR[todayRoutine.type] : COLORS.muted, fontWeight: 600, textDecoration: done.includes(e.id) ? "line-through" : "none" }}>
+                          {e.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Calories</p>
             <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
               <CalorieBar consumed={totalCals} goal={calorieGoal} />
@@ -704,7 +1298,13 @@ export default function App() {
             </div>
 
             <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Recent Workouts</p>
-            {workouts.slice(0, 3).map((w, idx) => (
+            {workouts.length === 0 ? (
+              <div style={{ background: COLORS.card, borderRadius: 12, padding: 20, marginBottom: 8, border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>△</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>No sessions yet</div>
+                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Tap Workout to start your first session</div>
+              </div>
+            ) : workouts.slice(0, 3).map(w => (
               <div key={w.id} style={{ background: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 20 }}>{w.type === "Cardio" ? "🏃" : w.type === "Mobility" ? "🧘" : "💪"}</span>
@@ -718,7 +1318,13 @@ export default function App() {
             ))}
 
             <p style={{ margin: "14px 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Meals</p>
-            {meals.map(m => (
+            {meals.length === 0 ? (
+              <div style={{ background: COLORS.card, borderRadius: 12, padding: 20, marginBottom: 8, border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>◎</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>No meals logged yet</div>
+                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Tap Nutrition to scan or log a meal</div>
+              </div>
+            ) : meals.map(m => (
               <div key={m.id} style={{ background: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 22 }}>{m.img}</span>
@@ -738,7 +1344,10 @@ export default function App() {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Nutrition</h2>
-              <button onClick={() => setShowScanner(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 Scan Meal</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setShowManualMeal(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Manual</button>
+                <button onClick={() => setShowScanner(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 Scan</button>
+              </div>
             </div>
             <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
               <CalorieBar consumed={totalCals} goal={calorieGoal} />
@@ -786,7 +1395,13 @@ export default function App() {
             </div>
 
             <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Meals</p>
-            {meals.map(m => (
+            {meals.length === 0 ? (
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: 24, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>No meals logged</div>
+                <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>Tap 📸 Scan Meal to analyse a photo, or log manually</div>
+              </div>
+            ) : meals.map(m => (
               <div key={m.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -813,10 +1428,77 @@ export default function App() {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Workouts</h2>
-              <button onClick={() => setShowWorkout(true)} style={{ padding: "8px 14px", background: COLORS.blue, color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Log Session</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setShowQuickLog(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Quick Log</button>
+                <button onClick={() => { if (activeSession) return; if (todayRoutine?.exercises?.length > 0) { setShowSessionStart(true); } else { startActiveSession(); } }} disabled={!!activeSession} style={{ padding: "8px 14px", background: activeSession ? COLORS.accentDim : COLORS.accent, color: activeSession ? COLORS.accent : "#000", border: activeSession ? `1px solid ${COLORS.accentMid}` : "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: activeSession ? "default" : "pointer" }}>{activeSession ? "● Active" : "▶ Start"}</button>
+              </div>
             </div>
+            {/* Weekly Routine Planner */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ margin: "0 0 8px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Weekly Routine</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+                {DAYS_MAP.map(({ key, label }) => {
+                  const plan = weeklyRoutine[key];
+                  const isToday = key === todayDayKey;
+                  return (
+                    <div key={key} onClick={() => setRoutineDay({ key, label })}
+                      style={{ background: plan ? ROUTINE_TYPE_COLOR[plan.type] + "22" : COLORS.card, borderRadius: 10, padding: "8px 4px", textAlign: "center", border: `1px solid ${isToday ? (plan ? ROUTINE_TYPE_COLOR[plan.type] : COLORS.accent) : (plan ? ROUTINE_TYPE_COLOR[plan.type] + "44" : COLORS.border)}`, cursor: "pointer", position: "relative" }}>
+                      {isToday && <div style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: COLORS.accent }} />}
+                      <div style={{ fontSize: 9, color: isToday ? COLORS.accent : COLORS.muted, fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                      {plan ? (
+                        <>
+                          <div style={{ fontSize: 14 }}>{plan.type === "Rest" ? "😴" : plan.type === "Cardio" ? "🏃" : plan.type === "Mobility" ? "🧘" : plan.type === "HIIT" ? "⚡" : plan.type === "Sport" ? "⚽" : "💪"}</div>
+                          <div style={{ fontSize: 8, color: ROUTINE_TYPE_COLOR[plan.type], fontWeight: 700, marginTop: 3, lineHeight: 1.2 }}>{plan.name.length > 8 ? plan.name.slice(0, 7) + "…" : plan.name}</div>
+                          {(plan.exercises || []).length > 0 && <div style={{ fontSize: 8, color: COLORS.muted, marginTop: 2 }}>{plan.exercises.length} ex</div>}
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 16, color: COLORS.border }}>+</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Today's Exercise Checklist */}
+            {todayRoutine && (todayRoutine.exercises || []).length > 0 && (() => {
+              const checkKey = `${todayDayKey}_${todayKey}`;
+              const done = routineChecks[checkKey] || [];
+              const toggle = (id) => setRoutineChecks(prev => {
+                const current = prev[checkKey] || [];
+                const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+                return { ...prev, [checkKey]: next };
+              });
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Exercises — {todayRoutine.name}</p>
+                    <span style={{ fontSize: 11, color: COLORS.accent, fontWeight: 700 }}>{done.length}/{todayRoutine.exercises.length}</span>
+                  </div>
+                  {todayRoutine.exercises.map(ex => {
+                    const isDone = done.includes(ex.id);
+                    return (
+                      <div key={ex.id} onClick={() => toggle(ex.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 12, background: COLORS.card, borderRadius: 12, padding: "12px 14px", marginBottom: 8, border: `1px solid ${isDone ? ROUTINE_TYPE_COLOR[todayRoutine.type] + "66" : COLORS.border}`, cursor: "pointer", opacity: isDone ? 0.7 : 1 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isDone ? ROUTINE_TYPE_COLOR[todayRoutine.type] : COLORS.border}`, background: isDone ? ROUTINE_TYPE_COLOR[todayRoutine.type] : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {isDone && <span style={{ fontSize: 13, color: "#000", fontWeight: 900 }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, textDecoration: isDone ? "line-through" : "none" }}>{ex.name}</div>
+                          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 1 }}>
+                            {[ex.sets && `${ex.sets} sets`, ex.reps && `${ex.reps} reps`, ex.weight && `${ex.weight} kg`].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        {isDone && <span style={{ fontSize: 11, color: ROUTINE_TYPE_COLOR[todayRoutine.type], fontWeight: 700 }}>Done</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
-              {[{ label: "Sessions", value: workouts.length, unit: "this week" }, { label: "Total Time", value: workouts.reduce((s,w)=>s+w.duration,0), unit: "min" }, { label: "Cals Burned", value: workouts.reduce((s,w)=>s+w.calories,0), unit: "kcal" }].map(s => (
+              {[{ label: "Sessions", value: workouts.length, unit: "logged" }, { label: "Total Time", value: workouts.reduce((s, w) => s + w.duration, 0), unit: "min" }, { label: "Cals Burned", value: workouts.reduce((s, w) => s + w.calories, 0), unit: "kcal" }].map(s => (
                 <div key={s.label} style={{ background: COLORS.card, borderRadius: 12, padding: 12, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.blue, fontFamily: "'Space Mono',monospace" }}>{s.value}</div>
                   <div style={{ fontSize: 9, color: COLORS.muted }}>{s.unit}</div>
@@ -824,7 +1506,13 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {workouts.map(w => (
+            {workouts.length === 0 ? (
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: 32, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>💪</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>No sessions logged yet</div>
+                <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 6 }}>Tap ▶ Start to begin your first tracked session</div>
+              </div>
+            ) : workouts.map(w => (
               <div key={w.id} style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                   <div>
@@ -832,11 +1520,14 @@ export default function App() {
                       <span style={{ fontSize: 18 }}>{w.type === "Cardio" ? "🏃" : w.type === "Mobility" ? "🧘" : "💪"}</span>
                       <span style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>{w.name}</span>
                     </div>
-                    <Badge text={w.type} color={workoutTypeColor[w.type]||COLORS.mutedLight} />
+                    <Badge text={w.type} color={workoutTypeColor[w.type] || COLORS.mutedLight} />
                   </div>
-                  <span style={{ fontSize: 11, color: COLORS.muted }}>{w.date}</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span style={{ fontSize: 11, color: COLORS.muted }}>{w.date}</span>
+                    <button onClick={() => { if (window.confirm("Delete this session?")) setWorkouts(prev => prev.filter(x => x.id !== w.id)); }} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: 0 }}>✕ delete</button>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: w.exercises?.length ? 10 : 0 }}>
                   {[{ v: `${w.duration}m`, l: "Duration", c: COLORS.text }, { v: w.calories, l: "kcal", c: COLORS.yellow }, ...(w.distance ? [{ v: w.distance, l: "Distance", c: COLORS.blue }] : []), ...(w.sets ? [{ v: w.sets, l: "Sets", c: COLORS.accent }] : [])].map((x, i) => (
                     <div key={i} style={{ flex: 1, background: COLORS.bg, borderRadius: 8, padding: 8, textAlign: "center" }}>
                       <div style={{ fontSize: 14, fontWeight: 800, color: x.c }}>{x.v}</div>
@@ -844,29 +1535,22 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
-
-            <p style={{ margin: "16px 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Exercise Progress</p>
-            <button onClick={() => setShowExerciseLog(true)} style={{ width: "100%", padding: "10px", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 12, color: COLORS.accent, cursor: "pointer", fontSize: 13, fontWeight: 700, marginBottom: 14 }}>+ Log Exercises for a Session</button>
-            {exerciseLogs.map(log => (
-              <div key={log.id} style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: COLORS.text }}>💪 {log.sessionName}</span>
-                  <span style={{ fontSize: 11, color: COLORS.muted }}>{log.date}</span>
-                </div>
-                {log.exercises.map((ex, i) => (
-                  <div key={i} style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.accent, marginBottom: 5 }}>{ex.name}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {ex.sets.map((s, j) => (
-                        <div key={j} style={{ background: COLORS.bg, borderRadius: 8, padding: "5px 10px", fontSize: 11, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>
-                          <span style={{ color: COLORS.mutedLight }}>S{j + 1} </span>{s.reps}<span style={{ color: COLORS.muted }}>×</span><span style={{ color: COLORS.yellow }}>{s.weight}kg</span>
+                {w.exercises?.length > 0 && (
+                  <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+                    {w.exercises.map((ex, i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.accent, marginBottom: 4 }}>{ex.name}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {ex.sets.map((s, j) => (
+                            <div key={j} style={{ background: COLORS.bg, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>
+                              <span style={{ color: COLORS.muted }}>S{j + 1} </span>{s.reps}<span style={{ color: COLORS.muted }}>×</span><span style={{ color: COLORS.yellow }}>{s.weight}kg</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             ))}
           </div>
@@ -878,25 +1562,79 @@ export default function App() {
         {/* ── SUPPLEMENTS ── */}
         {tab === "supplements" && (
           <div>
-            <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Supplements</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-              {supplements.map(s => (
-                <div key={s.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <span style={{ fontSize: 28 }}>{s.emoji}</span>
-                    <Badge text={s.category} color={s.color} />
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.text, marginBottom: 2 }}>{s.name}</div>
-                  <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>{s.dose} · {s.timing}</div>
-                  <div style={{ fontSize: 11, color: s.color }}>{s.benefit}</div>
-                  <div style={{ display: "flex", gap: 2, marginTop: 8, flexWrap: "wrap" }}>
-                    {s.history.slice(-14).map((h, i) => (
-                      <div key={i} style={{ width: 8, height: 8, borderRadius: 2, background: h.taken ? s.color : COLORS.border }} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Supplements</h2>
+              <button onClick={() => setShowAddSupp(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Add</button>
             </div>
+            {supplements.length === 0 ? (
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: 32, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>❋</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>No supplements yet</div>
+                <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 6 }}>Tap + Add to log your stack</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {supplements.map(s => {
+                  const takenToday = !!(s.history?.[todayKey]);
+                  // Streak: count consecutive days taken going backwards
+                  let streak = 0;
+                  const d = new Date();
+                  for (let i = 0; i < 365; i++) {
+                    const k = d.toISOString().slice(0, 10);
+                    if (!s.history?.[k]) break;
+                    streak++;
+                    d.setDate(d.getDate() - 1);
+                  }
+                  // Last 7 days strip
+                  const last7 = Array.from({ length: 7 }, (_, i) => {
+                    const dd = new Date();
+                    dd.setDate(dd.getDate() - 6 + i);
+                    return dd.toISOString().slice(0, 10);
+                  });
+                  return (
+                    <div key={s.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <span style={{ fontSize: 26 }}>{s.emoji}</span>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.text }}>{s.name}</div>
+                            <div style={{ fontSize: 11, color: COLORS.muted }}>{s.dose} · {s.timing}</div>
+                            {s.benefit && <div style={{ fontSize: 11, color: s.color, marginTop: 2 }}>{s.benefit}</div>}
+                          </div>
+                        </div>
+                        {/* Ring toggle */}
+                        <button onClick={() => setSupplements(prev => prev.map(sp => sp.id === s.id ? { ...sp, history: { ...sp.history, [todayKey]: !takenToday } } : sp))}
+                          style={{ width: 48, height: 48, borderRadius: "50%", border: `3px solid ${takenToday ? s.color : COLORS.border}`, background: takenToday ? s.color + "22" : "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
+                          <span style={{ fontSize: takenToday ? 16 : 11, color: takenToday ? s.color : COLORS.muted, fontWeight: 800, lineHeight: 1 }}>{takenToday ? "✓" : "TAKE"}</span>
+                        </button>
+                      </div>
+                      {/* 7-day strip + streak */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {last7.map((dk, i) => {
+                            const taken = !!(s.history?.[dk]);
+                            const isToday = dk === todayKey;
+                            return (
+                              <div key={i} title={dk}
+                                style={{ width: 22, height: 22, borderRadius: 5, background: taken ? s.color : COLORS.bg, border: `1px solid ${isToday ? s.color : COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {isToday && !taken && <div style={{ width: 5, height: 5, borderRadius: "50%", background: COLORS.border }} />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {streak > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 13 }}>🔥</span>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: s.color }}>{streak}d</span>
+                          </div>
+                        )}
+                      </div>
+                      <Badge text={s.category} color={s.color} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -919,28 +1657,64 @@ export default function App() {
                 <div style={{ fontSize: 11, color: COLORS.yellow }}>Moderate load</div>
               </div>
             </div>
+            {/* Active injuries */}
             <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Active Injuries & Symptoms</p>
-            {injuries.length === 0 ? (
+            {injuries.filter(i => i.status !== "healed").length === 0 ? (
               <div style={{ background: COLORS.card, borderRadius: 14, padding: 24, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>All clear!</div>
-                <div style={{ fontSize: 12, color: COLORS.muted }}>No active injuries logged</div>
+                <div style={{ fontSize: 12, color: COLORS.muted }}>No active injuries or symptoms</div>
               </div>
-            ) : injuries.map(inj => (
-              <div key={inj.id} style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 10, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${severityColor[inj.severity]||COLORS.warn}` }}>
+            ) : injuries.filter(i => i.status !== "healed").map(inj => (
+              <div key={inj.id} style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 10, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${STATUS_COLOR[inj.status] || COLORS.warn}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, marginBottom: 4 }}>{inj.area}</div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <Badge text={inj.severity} color={severityColor[inj.severity]||COLORS.warn} />
-                      <Badge text={inj.status} color={statusColor[inj.status]||COLORS.mutedLight} />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Badge text={inj.severity} color={severityColor[inj.severity] || COLORS.warn} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: STATUS_COLOR[inj.status] }}>
+                        {STATUS_ICON[inj.status]} {inj.status.charAt(0).toUpperCase() + inj.status.slice(1)}
+                      </div>
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, color: COLORS.muted }}>{inj.date}</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: COLORS.muted }}>{inj.date}</span>
+                    <button onClick={() => setEditingInjury(inj)} style={{ padding: "5px 10px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.mutedLight, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Update</button>
+                  </div>
                 </div>
-                {inj.note && <p style={{ margin: 0, fontSize: 12, color: COLORS.mutedLight, fontStyle: "italic" }}>"{inj.note}"</p>}
+                {inj.note && <p style={{ margin: "0 0 6px", fontSize: 12, color: COLORS.mutedLight, fontStyle: "italic" }}>"{inj.note}"</p>}
+                {/* Mini progression trail */}
+                {(inj.log || []).length > 1 && (
+                  <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}>
+                    {(inj.log || []).slice(-5).map((entry, i, arr) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[entry.status] }} title={entry.status} />
+                        {i < arr.length - 1 && <div style={{ width: 12, height: 1, background: COLORS.border }} />}
+                      </div>
+                    ))}
+                    <span style={{ fontSize: 10, color: COLORS.muted, marginLeft: 4 }}>{(inj.log || []).length} updates</span>
+                  </div>
+                )}
               </div>
             ))}
+
+            {/* Healed injuries */}
+            {injuries.filter(i => i.status === "healed").length > 0 && (
+              <>
+                <p style={{ margin: "16px 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Recovered</p>
+                {injuries.filter(i => i.status === "healed").map(inj => (
+                  <div key={inj.id} style={{ background: COLORS.card, borderRadius: 14, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${STATUS_COLOR.healed}`, opacity: 0.7 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{inj.area}</div>
+                        <div style={{ fontSize: 11, color: STATUS_COLOR.healed }}>✓ Healed · {(inj.log || []).length} updates logged</div>
+                      </div>
+                      <button onClick={() => setEditingInjury(inj)} style={{ padding: "4px 8px", background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 7, color: COLORS.muted, cursor: "pointer", fontSize: 10 }}>View</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
 
@@ -948,6 +1722,8 @@ export default function App() {
         {tab === "profile" && (
           <ProfilePage profile={profile} setProfile={setProfile} />
         )}
+
+      </div>
 
       <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
   <p style={{ margin: "0 0 12px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Data</p>
@@ -976,14 +1752,14 @@ export default function App() {
       </div>
 
       {showScanner && <AIPhotoScanner onClose={() => setShowScanner(false)} onScan={m => setMeals(prev => [...prev, { id: Date.now(), name: m.name, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, img: "🍽️" }])} />}
-      {showWorkout && <AddWorkoutModal onClose={() => setShowWorkout(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
+      {showManualMeal && <ManualMealModal onClose={() => setShowManualMeal(false)} onAdd={m => setMeals(prev => [...prev, m])} />}
+      {showActiveWorkout && activeSession && <ActiveWorkoutSession session={activeSession} setSession={setActiveSession} sessionElapsed={sessionElapsed} restLeft={restLeft} resting={resting} onFinish={handleFinishSession} onClose={() => setShowActiveWorkout(false)} />}
+      {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
       {showInjury && <AddInjuryModal onClose={() => setShowInjury(false)} onAdd={inj => setInjuries(prev => [inj, ...prev])} />}
-      {showExerciseLog && (
-        <ExerciseLogModal
-          onClose={() => setShowExerciseLog(false)}
-          onAdd={log => setExerciseLogs(prev => [log, ...prev])}
-        />
-      )}
+      {showAddSupp && <AddSupplementModal onClose={() => setShowAddSupp(false)} onAdd={s => setSupplements(prev => [...prev, s])} />}
+      {editingInjury && <UpdateInjuryModal injury={editingInjury} onClose={() => setEditingInjury(null)} onUpdate={inj => { setInjuries(prev => prev.map(i => i.id === inj.id ? inj : i)); setEditingInjury(null); }} />}
+      {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }} />}
+      {showSessionStart && todayRoutine && <SessionStartPrompt todayRoutine={todayRoutine} onClose={() => setShowSessionStart(false)} onUseRoutine={() => { setShowSessionStart(false); startActiveSession(todayRoutine.exercises, todayRoutine.name, todayRoutine.type); }} onFresh={() => { setShowSessionStart(false); startActiveSession(); }} />}
     </div>
   );
 }
