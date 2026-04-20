@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import imageCompression from "browser-image-compression";
+import { savePhoto, loadPhoto, deletePhoto } from "./db.js";
 
-const COLORS = {
+const DARK_COLORS = {
   bg: "#0a0a0f",
   surface: "#13131a",
   card: "#1a1a24",
@@ -18,6 +20,68 @@ const COLORS = {
   mutedLight: "#9999b0",
 };
 
+const LIGHT_COLORS = {
+  bg: "#f2f2f7",
+  surface: "#ffffff",
+  card: "#e9e9ef",
+  border: "#d1d1d6",
+  accent: "#00a870",
+  accentDim: "#00a87018",
+  accentMid: "#00a87050",
+  warn: "#ff3b30",
+  blue: "#007aff",
+  yellow: "#ff9500",
+  purple: "#af52de",
+  orange: "#e8560a",
+  text: "#1c1c1e",
+  muted: "#8e8e93",
+  mutedLight: "#6c6c70",
+};
+
+// Mutable — synced to theme before every render
+const COLORS = { ...DARK_COLORS };
+
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+
+const ONBOARDING_STEPS = [
+  { icon: "💪", title: "Hey, Coach here.", body: "Welcome to NourishFit — I'll help you eat smarter, train harder, and track your transformation. Let me show you around real quick." },
+  { icon: "◎", title: "Nutrition & Water", body: "Log meals by typing or snap a photo — I'll scan it and pull the macros instantly. Track your water intake right alongside it." },
+  { icon: "△", title: "Training", body: "Plan your weekly routine, start live sessions with set tracking and rest timers, or quick-log cardio. Your full history lives here." },
+  { icon: "✦", title: "Ask Me Anything", body: "The Coach tab is your AI trainer — form tips, training splits, recovery advice. Available 24/7, no appointment needed." },
+  { icon: "◫", title: "Progress Photos", body: "Take up to 5 check-in photos per day. Pick any two dates and compare side by side. Seeing is believing." },
+  { icon: "◉", title: "First stop: your Profile.", body: "Fill in your weight, height, and goal so I can dial in your calorie targets and macro splits. Takes 30 seconds.", isLast: true },
+];
+
+function OnboardingModal({ onComplete }) {
+  const [step, setStep] = useState(0);
+  const s = ONBOARDING_STEPS[step];
+  const isLast = step === ONBOARDING_STEPS.length - 1;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", background: `${COLORS.bg}e0` }}>
+      <div style={{ width: "100%", maxWidth: 480, background: COLORS.surface, borderRadius: "28px 28px 0 0", padding: "0 24px calc(32px + env(safe-area-inset-bottom,0px))", border: `1px solid ${COLORS.border}`, borderBottom: "none" }}>
+        <div style={{ width: 36, height: 4, background: COLORS.border, borderRadius: 99, margin: "14px auto 0" }} />
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 0 4px" }}>
+          <button onClick={onComplete} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 14, cursor: "pointer", fontWeight: 600 }}>Skip</button>
+        </div>
+        <div style={{ fontSize: 54, textAlign: "center", marginBottom: 18, lineHeight: 1, fontFamily: "'Space Mono',monospace" }}>{s.icon}</div>
+        <div style={{ fontSize: 21, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.text, textAlign: "center", marginBottom: 12, lineHeight: 1.25 }}>{s.title}</div>
+        <div style={{ fontSize: 15, color: COLORS.muted, textAlign: "center", lineHeight: 1.65, marginBottom: 30, minHeight: 72 }}>{s.body}</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 22 }}>
+          {ONBOARDING_STEPS.map((_, i) => (
+            <div key={i} onClick={() => i < step && setStep(i)}
+              style={{ width: i === step ? 20 : 6, height: 6, borderRadius: 99, background: i <= step ? COLORS.accent : COLORS.border, transition: "all 0.3s cubic-bezier(.4,0,.2,1)", cursor: i < step ? "pointer" : "default" }} />
+          ))}
+        </div>
+        <button onClick={() => isLast ? onComplete() : setStep(n => n + 1)}
+          style={{ width: "100%", padding: "16px 0", background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+          {isLast ? "Let's Go 🚀" : "Next →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const NAV = [
   { id: "dashboard", icon: "⊞", label: "Home" },
   { id: "nutrition", icon: "◎", label: "Nutrition" },
@@ -25,6 +89,7 @@ const NAV = [
   { id: "coach", icon: "✦", label: "Coach" },
   { id: "supplements", icon: "❋", label: "Supps" },
   { id: "health", icon: "♡", label: "Health" },
+  { id: "progress", icon: "◫", label: "Progress" },
   { id: "profile", icon: "◉", label: "Profile" },
 ];
 
@@ -535,7 +600,7 @@ function AICoach() {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-function ProfilePage({ profile, setProfile }) {
+function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(profile);
 
@@ -669,6 +734,30 @@ function ProfilePage({ profile, setProfile }) {
             <span style={{ fontSize: 14, fontWeight: 800, color: row.color, fontFamily: "'Space Mono',monospace" }}>{row.value}</span>
           </div>
         ))}
+      </div>
+
+      {/* Appearance */}
+      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+        <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Appearance</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{isDark ? "Dark Mode" : "Light Mode"}</div>
+            <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Follows your system by default</div>
+          </div>
+          <button onClick={onToggleTheme}
+            style={{ width: 52, height: 30, borderRadius: 99, background: isDark ? COLORS.border : COLORS.accent, border: "none", cursor: "pointer", position: "relative", transition: "background 0.25s" }}>
+            <div style={{ position: "absolute", top: 3, left: isDark ? 4 : 22, width: 24, height: 24, borderRadius: "50%", background: isDark ? COLORS.mutedLight : "#fff", transition: "left 0.25s", boxShadow: "0 1px 3px #0004" }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Help */}
+      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+        <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Help</p>
+        <button onClick={onShowTutorial}
+          style={{ width: "100%", padding: "11px 0", background: `${COLORS.blue}18`, border: `1px solid ${COLORS.blue}44`, borderRadius: 12, color: COLORS.blue, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          View App Tutorial
+        </button>
       </div>
     </div>
   );
@@ -1032,10 +1121,538 @@ function SessionStartPrompt({ todayRoutine, onUseRoutine, onFresh, onClose }) {
   );
 }
 
+// ─── Sleep Logger ─────────────────────────────────────────────────────────────
+
+const SLEEP_QUALITY = [
+  { id: "poor",  label: "Poor",  emoji: "😴", color: () => COLORS.warn   },
+  { id: "fair",  label: "Fair",  emoji: "😐", color: () => COLORS.yellow },
+  { id: "good",  label: "Good",  emoji: "🙂", color: () => COLORS.accent },
+  { id: "great", label: "Great", emoji: "😄", color: () => COLORS.blue   },
+];
+
+function LogSleepModal({ existing, onClose, onSave }) {
+  const [hours, setHours] = useState(existing?.hours?.toString() || "");
+  const [quality, setQuality] = useState(existing?.quality || "good");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 1000, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: COLORS.surface, borderRadius: "20px 20px 0 0", padding: "20px 20px calc(24px + env(safe-area-inset-bottom,0px))", border: `1px solid ${COLORS.border}` }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Sleep</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Hours slept</label>
+        <input type="number" inputMode="decimal" placeholder="e.g. 7.5" step="0.5" min="0" max="24" value={hours}
+          onChange={e => setHours(e.target.value)}
+          style={{ width: "100%", marginTop: 8, marginBottom: 18, padding: "12px 14px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.text, fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono',monospace", outline: "none" }} />
+
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Sleep quality</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginTop: 8, marginBottom: 22 }}>
+          {SLEEP_QUALITY.map(q => (
+            <button key={q.id} onClick={() => setQuality(q.id)}
+              style={{ padding: "10px 4px", borderRadius: 12, border: `2px solid ${quality === q.id ? q.color() : COLORS.border}`, background: quality === q.id ? `${q.color()}18` : COLORS.card, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 22 }}>{q.emoji}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: quality === q.id ? q.color() : COLORS.muted }}>{q.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ background: `${COLORS.blue}12`, border: `1px solid ${COLORS.blue}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 16 }}></span>
+          <span style={{ fontSize: 12, color: COLORS.muted }}>Apple Health sync coming soon — your logs are safe here.</span>
+        </div>
+
+        <button
+          onClick={() => { const h = parseFloat(hours); if (h > 0 && h <= 24) { onSave({ hours: h, quality }); onClose(); } }}
+          style={{ width: "100%", padding: 14, background: COLORS.blue, border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+          Save Sleep
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Water Tracker ────────────────────────────────────────────────────────────
+
+const WATER_QUICK = [
+  { ml: 250, label: "250ml", icon: "🥛" },
+  { ml: 500, label: "500ml", icon: "💧" },
+  { ml: 750, label: "750ml", icon: "🍶" },
+  { ml: 1000, label: "1L", icon: "🫙" },
+];
+
+function WaterCard({ waterToday, waterGoal, onAdd, onReset }) {
+  const [customMl, setCustomMl] = useState("");
+  const pct = Math.min(waterToday / waterGoal, 1);
+  const remaining = Math.max(waterGoal - waterToday, 0);
+  const fmtMl = ml => ml >= 1000 ? `${(ml / 1000).toFixed(ml % 1000 === 0 ? 0 : 1)}L` : `${ml}ml`;
+
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>💧 Water Intake</p>
+        <button onClick={onReset} style={{ fontSize: 10, padding: "3px 8px", background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.muted, cursor: "pointer" }}>Reset day</button>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 10 }}>
+        <span style={{ fontSize: 38, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.blue, lineHeight: 1 }}>{fmtMl(waterToday)}</span>
+        <span style={{ fontSize: 14, color: COLORS.muted, paddingBottom: 4 }}>/ {fmtMl(waterGoal)} goal</span>
+      </div>
+
+      {/* Fill bar */}
+      <div style={{ height: 10, background: COLORS.bg, borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
+        <div style={{ height: "100%", width: `${pct * 100}%`, background: "linear-gradient(90deg,#4d9fff,#00c3ff)", borderRadius: 99, transition: "width 0.5s ease" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+        <span style={{ fontSize: 11, color: COLORS.blue, fontWeight: 700 }}>{Math.round(pct * 100)}%</span>
+        <span style={{ fontSize: 11, color: COLORS.muted }}>{remaining > 0 ? `${fmtMl(remaining)} to go` : "Goal reached 🎉"}</span>
+      </div>
+
+      {/* Quick add */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 10 }}>
+        {WATER_QUICK.map(q => (
+          <button key={q.ml} onClick={() => onAdd(q.ml)}
+            style={{ padding: "10px 4px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, transition: "border-color 0.15s" }}>
+            <span style={{ fontSize: 20 }}>{q.icon}</span>
+            <span style={{ fontSize: 10, color: COLORS.mutedLight, fontWeight: 700 }}>{q.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Custom amount */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="number" inputMode="numeric" placeholder="Custom ml…" value={customMl}
+          onChange={e => setCustomMl(e.target.value)}
+          style={{ flex: 1, padding: "9px 12px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, fontSize: 13, outline: "none" }} />
+        <button onClick={() => { const v = parseInt(customMl); if (v > 0) { onAdd(v); setCustomMl(""); } }}
+          style={{ padding: "9px 16px", background: `${COLORS.blue}22`, border: `1px solid ${COLORS.blue}`, borderRadius: 10, color: COLORS.blue, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+          + Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Progress Photos ───────────────────────────────────────────────────────────
+
+const MAX_PHOTOS_PER_DAY = 5;
+
+function AddPhotoModal({ onClose, onAdd, targetDate, existingCount = 0 }) {
+  const [phase, setPhase] = useState("idle");
+  const [preview, setPreview] = useState(null);
+  const [blob, setBlob] = useState(null);
+  const [weight, setWeight] = useState("");
+  const [notes, setNotes] = useState("");
+  const fileRef = useRef();
+
+  const displayDate = new Date(targetDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const remaining = MAX_PHOTOS_PER_DAY - existingCount;
+
+  async function handleFile(file) {
+    if (!file) return;
+    setPhase("compressing");
+    try {
+      const compressed = await imageCompression(file, { maxSizeMB: 0.2, maxWidthOrHeight: 1080, useWebWorker: true, fileType: "image/jpeg" });
+      setBlob(compressed);
+      setPreview(URL.createObjectURL(compressed));
+      setPhase("done");
+    } catch {
+      setPhase("error");
+    }
+  }
+
+  async function handleSave() {
+    if (!blob) return;
+    const id = `photo_${Date.now()}`;
+    await savePhoto(id, blob);
+    onAdd({
+      id,
+      date: targetDate,
+      dateStr: new Date(targetDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      weight: weight ? parseFloat(weight) : null,
+      notes: notes.trim(),
+    });
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 1000, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: COLORS.surface, borderRadius: "20px 20px 0 0", padding: "20px 20px calc(20px + env(safe-area-inset-bottom,0px))", border: `1px solid ${COLORS.border}` }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Progress Photo</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 18 }}>{displayDate} · {remaining} slot{remaining !== 1 ? "s" : ""} remaining</div>
+
+        {phase === "idle" && (
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            <button onClick={() => { fileRef.current.removeAttribute("capture"); fileRef.current.click(); }}
+              style={{ flex: 1, padding: "14px 0", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 28 }}>🖼️</span>Library
+            </button>
+            <button onClick={() => { fileRef.current.setAttribute("capture", "environment"); fileRef.current.click(); }}
+              style={{ flex: 1, padding: "14px 0", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 28 }}>📷</span>Camera
+            </button>
+          </div>
+        )}
+
+        {phase === "compressing" && (
+          <div style={{ textAlign: "center", padding: "30px 0", color: COLORS.muted }}>
+            <div style={{ fontSize: 32, marginBottom: 10, animation: "spin 1s linear infinite", display: "inline-block" }}>⚙️</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Compressing…</div>
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div style={{ textAlign: "center", padding: "30px 0", color: COLORS.warn }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Failed to process image. Try another.</div>
+          </div>
+        )}
+
+        {phase === "done" && preview && (
+          <>
+            <img src={preview} alt="preview" style={{ width: "100%", borderRadius: 12, maxHeight: 240, objectFit: "cover", marginBottom: 14 }} />
+            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Weight (optional)</label>
+                <input type="number" inputMode="decimal" placeholder="e.g. 75.4 kg" value={weight} onChange={e => setWeight(e.target.value)}
+                  style={{ width: "100%", marginTop: 6, padding: "9px 12px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, fontSize: 13, outline: "none" }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Notes (optional)</label>
+              <input type="text" placeholder="How are you feeling…" value={notes} onChange={e => setNotes(e.target.value)}
+                style={{ width: "100%", marginTop: 6, padding: "9px 12px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, fontSize: 13, outline: "none" }} />
+            </div>
+            <button onClick={handleSave}
+              style={{ width: "100%", padding: 14, background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+              Save Photo
+            </button>
+          </>
+        )}
+
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
+      </div>
+    </div>
+  );
+}
+
+function PhotoViewer({ photo, url, onClose, onDelete }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000f", zIndex: 1100, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top,0px) + 12px) 20px 12px", background: "#0008" }}>
+        <button onClick={onClose} style={{ background: "#fff2", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", fontWeight: 700, padding: "6px 10px", borderRadius: 8 }}>← Back</button>
+        <span style={{ fontSize: 13, color: "#ffffffaa", fontWeight: 600 }}>{photo.dateStr}</span>
+        <button onClick={() => { if (window.confirm("Delete this photo?")) onDelete(photo.id); }}
+          style={{ background: "#ff4a4a33", border: "1px solid #ff4a4a55", color: "#ff6b6b", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer" }}>
+          Delete
+        </button>
+      </div>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {url ? <img src={url} alt="progress" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <div style={{ color: COLORS.muted }}>Loading…</div>}
+      </div>
+      {(photo.weight || photo.notes) && (
+        <div style={{ padding: "12px 20px calc(12px + env(safe-area-inset-bottom,0px))", background: "#0008", display: "flex", gap: 14, alignItems: "center" }}>
+          {photo.weight && <span style={{ fontSize: 13, color: "#ffffffcc", fontWeight: 700 }}>⚖️ {photo.weight} kg</span>}
+          {photo.notes && <span style={{ fontSize: 12, color: "#ffffff88", fontStyle: "italic" }}>"{photo.notes}"</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareView({ beforeDate, afterDate, photos, onClose }) {
+  const [urls, setUrls] = useState({});
+  const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+
+  const beforePhotos = photos.filter(p => p.date === beforeDate);
+  const afterPhotos = photos.filter(p => p.date === afterDate);
+
+  useEffect(() => {
+    [beforePhotos[0], afterPhotos[0]].filter(Boolean).forEach(async p => {
+      const blob = await loadPhoto(p.id);
+      if (blob) setUrls(prev => ({ ...prev, [p.id]: URL.createObjectURL(blob) }));
+    });
+  }, []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000f", zIndex: 1100, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top,0px) + 12px) 20px 12px", background: "#0008" }}>
+        <button onClick={onClose} style={{ background: "#fff2", border: "none", color: "#fff", fontSize: 14, fontWeight: 700, padding: "6px 12px", borderRadius: 8, cursor: "pointer" }}>← Back</button>
+        <span style={{ fontSize: 13, color: "#ffffffaa", fontWeight: 700 }}>Before / After</span>
+        <div style={{ width: 60 }} />
+      </div>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, overflow: "hidden" }}>
+        {[[beforePhotos[0], "Before", beforeDate], [afterPhotos[0], "After", afterDate]].map(([photo, label, date]) => (
+          <div key={date} style={{ position: "relative", overflow: "hidden", background: COLORS.card }}>
+            {photo && urls[photo.id]
+              ? <img src={urls[photo.id]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.muted, fontSize: 12 }}>{photo ? "Loading…" : "No photo"}</div>}
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent,#000d)", padding: "24px 10px 10px", textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>{label}</div>
+              <div style={{ fontSize: 11, color: "#ffffffaa" }}>{fmtDate(date)}</div>
+              {photo?.weight && <div style={{ fontSize: 10, color: "#ffffff88", marginTop: 2 }}>⚖️ {photo.weight}kg</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotoCalendarPage({ photos, onAdd, onDelete }) {
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [thumbnails, setThumbnails] = useState({});
+  const [dayUrls, setDayUrls] = useState({});
+  const [viewing, setViewing] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareDates, setCompareDates] = useState({ before: null, after: null });
+  const [showCompare, setShowCompare] = useState(false);
+
+  const photosByDate = {};
+  photos.forEach(p => { if (!photosByDate[p.date]) photosByDate[p.date] = []; photosByDate[p.date].push(p); });
+  const datesWithPhotos = Object.keys(photosByDate);
+
+  const year = month.getFullYear();
+  const monthNum = month.getMonth();
+  const monthStr = `${year}-${String(monthNum + 1).padStart(2, "0")}`;
+  const today = new Date().toISOString().split("T")[0];
+
+  // Load thumbnails (first photo per day) for current month
+  useEffect(() => {
+    datesWithPhotos.filter(d => d.startsWith(monthStr)).forEach(async date => {
+      if (thumbnails[date]) return;
+      const blob = await loadPhoto(photosByDate[date][0].id);
+      if (blob) setThumbnails(prev => ({ ...prev, [date]: URL.createObjectURL(blob) }));
+    });
+  }, [month, photos]);
+
+  // Load full-size photos for selected day
+  useEffect(() => {
+    if (!selectedDay) return;
+    (photosByDate[selectedDay] || []).forEach(async p => {
+      if (dayUrls[p.id]) return;
+      const blob = await loadPhoto(p.id);
+      if (blob) setDayUrls(prev => ({ ...prev, [p.id]: URL.createObjectURL(blob) }));
+    });
+  }, [selectedDay, photos]);
+
+  function handleDayTap(dateStr) {
+    if (compareMode) {
+      if (!photosByDate[dateStr]) return;
+      setCompareDates(prev => {
+        if (!prev.before) return { ...prev, before: dateStr };
+        if (!prev.after && dateStr !== prev.before) return { ...prev, after: dateStr };
+        if (dateStr === prev.before) return { ...prev, before: null };
+        if (dateStr === prev.after) return { ...prev, after: null };
+        return { before: prev.after, after: dateStr };
+      });
+    } else {
+      setSelectedDay(prev => prev === dateStr ? null : dateStr);
+    }
+  }
+
+  const daysInMonth = new Date(year, monthNum + 1, 0).getDate();
+  const firstDayOfWeek = new Date(year, monthNum, 1).getDay();
+  const cells = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const selectedDayPhotos = selectedDay ? (photosByDate[selectedDay] || []) : [];
+  const addTargetDate = selectedDay || today;
+  const sortedCompareDates = compareDates.before && compareDates.after
+    ? [compareDates.before, compareDates.after].sort() : null;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Progress</h2>
+        <div style={{ display: "flex", gap: 8 }}>
+          {datesWithPhotos.length >= 2 && (
+            <button onClick={() => { setCompareMode(m => !m); setCompareDates({ before: null, after: null }); setSelectedDay(null); }}
+              style={{ padding: "7px 12px", background: compareMode ? `${COLORS.purple}22` : COLORS.card, border: `1px solid ${compareMode ? COLORS.purple : COLORS.border}`, borderRadius: 10, color: compareMode ? COLORS.purple : COLORS.muted, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              {compareMode ? "Cancel" : "Compare"}
+            </button>
+          )}
+          {!compareMode && (
+            <button onClick={() => setShowAdd(true)}
+              style={{ padding: "7px 14px", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
+              + Photo
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Compare mode — date picker */}
+      {compareMode && (
+        <div style={{ background: `${COLORS.purple}12`, border: `1px solid ${COLORS.purple}33`, borderRadius: 14, padding: "14px", marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: COLORS.purple, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+            Tap two dates on the calendar to compare
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {[["Before", "before"], ["After", "after"]].map(([label, key]) => {
+              const picked = compareDates[key];
+              return (
+                <div key={key} style={{ background: picked ? `${COLORS.purple}22` : COLORS.card, border: `1px solid ${picked ? COLORS.purple : COLORS.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</div>
+                  {picked
+                    ? <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.purple }}>{new Date(picked + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                    : <div style={{ fontSize: 12, color: COLORS.muted }}>Tap a date ↓</div>}
+                </div>
+              );
+            })}
+          </div>
+          {sortedCompareDates && (
+            <button onClick={() => setShowCompare(true)}
+              style={{ width: "100%", marginTop: 12, padding: "11px", background: COLORS.purple, border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+              Compare →
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Month nav */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <button onClick={() => setMonth(new Date(year, monthNum - 1, 1))} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 20, cursor: "pointer", padding: "4px 14px", borderRadius: 8 }}>‹</button>
+        <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+        <button onClick={() => setMonth(new Date(year, monthNum + 1, 1))} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 20, cursor: "pointer", padding: "4px 14px", borderRadius: 8 }}>›</button>
+      </div>
+
+      {/* Weekday headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", marginBottom: 4 }}>
+        {["S","M","T","W","T","F","S"].map((d, i) => (
+          <div key={i} style={{ textAlign: "center", fontSize: 10, color: COLORS.muted, fontWeight: 700, padding: "4px 0" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const dateStr = `${year}-${String(monthNum + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const count = photosByDate[dateStr]?.length || 0;
+          const hasPhotos = count > 0;
+          const isToday = dateStr === today;
+          const isSelected = dateStr === selectedDay;
+          const isBeforeDate = compareDates.before === dateStr;
+          const isAfterDate = compareDates.after === dateStr;
+          const borderColor = isBeforeDate || isAfterDate ? COLORS.purple : isSelected ? COLORS.accent : isToday ? `${COLORS.accent}55` : "transparent";
+
+          return (
+            <div key={i} onClick={() => handleDayTap(dateStr)}
+              style={{
+                position: "relative", aspectRatio: "1", borderRadius: 8, overflow: "hidden",
+                border: `2px solid ${borderColor}`,
+                background: hasPhotos ? "transparent" : COLORS.card,
+                cursor: (hasPhotos || !compareMode) ? "pointer" : "default",
+                opacity: compareMode && !hasPhotos ? 0.25 : 1,
+              }}>
+              {thumbnails[dateStr]
+                ? <img src={thumbnails[dateStr]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : hasPhotos
+                  ? <div style={{ width: "100%", height: "100%", background: `${COLORS.accent}15`, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 11 }}>📷</span></div>
+                  : null}
+              {/* Day number */}
+              <div style={{ position: "absolute", top: 2, left: 3, fontSize: 9, fontWeight: 700, color: hasPhotos ? "#ffffffee" : isToday ? COLORS.accent : COLORS.muted, textShadow: hasPhotos ? "0 1px 2px #0009" : "none" }}>{day}</div>
+              {/* Count badge */}
+              {count > 1 && <div style={{ position: "absolute", bottom: 2, right: 2, background: "#000b", color: "#ffffffcc", fontSize: 7, fontWeight: 800, padding: "1px 3px", borderRadius: 3 }}>+{count-1}</div>}
+              {/* Compare B/A labels */}
+              {(isBeforeDate || isAfterDate) && <div style={{ position: "absolute", bottom: 2, left: 2, background: COLORS.purple, color: "#fff", fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 3 }}>{isBeforeDate ? "B" : "A"}</div>}
+              {/* Today dot (no photo) */}
+              {isToday && !hasPhotos && <div style={{ position: "absolute", bottom: 3, left: "50%", transform: "translateX(-50%)", width: 3, height: 3, borderRadius: "50%", background: COLORS.accent }} />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Selected day panel */}
+      {selectedDay && !compareMode && (
+        <div style={{ marginTop: 14, background: COLORS.card, borderRadius: 16, padding: 16, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.text }}>
+                {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                {selectedDayPhotos.length} / {MAX_PHOTOS_PER_DAY} photos
+                {selectedDayPhotos.length >= MAX_PHOTOS_PER_DAY && <span style={{ color: COLORS.warn, marginLeft: 6 }}>· limit reached</span>}
+              </div>
+            </div>
+            {selectedDayPhotos.length < MAX_PHOTOS_PER_DAY && (
+              <button onClick={() => setShowAdd(true)}
+                style={{ padding: "7px 12px", background: `${COLORS.accent}22`, border: `1px solid ${COLORS.accent}`, borderRadius: 8, color: COLORS.accent, cursor: "pointer", fontSize: 11, fontWeight: 800 }}>
+                + Add
+              </button>
+            )}
+          </div>
+          {selectedDayPhotos.length === 0
+            ? <div style={{ textAlign: "center", padding: "14px 0", fontSize: 12, color: COLORS.muted }}>No photos for this day</div>
+            : (
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+                {selectedDayPhotos.map(p => (
+                  <div key={p.id} onClick={() => setViewing(p)}
+                    style={{ flexShrink: 0, width: 100, borderRadius: 10, overflow: "hidden", cursor: "pointer", position: "relative", aspectRatio: "3/4", background: COLORS.bg }}>
+                    {dayUrls[p.id]
+                      ? <img src={dayUrls[p.id]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.muted }}>…</div>}
+                    {p.weight && (
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent,#000b)", padding: "12px 6px 5px" }}>
+                        <div style={{ fontSize: 9, color: "#ffffffcc", fontWeight: 700 }}>⚖️ {p.weight}kg</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Footer count */}
+      {photos.length > 0 && (
+        <div style={{ marginTop: 14, textAlign: "center", fontSize: 11, color: COLORS.muted }}>
+          {photos.length} photo{photos.length !== 1 ? "s" : ""} · {datesWithPhotos.length} day{datesWithPhotos.length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {photos.length === 0 && !compareMode && (
+        <div style={{ marginTop: 20, background: COLORS.card, borderRadius: 14, padding: 28, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📸</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>No photos yet</div>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>Up to {MAX_PHOTOS_PER_DAY} photos per day</div>
+          <button onClick={() => setShowAdd(true)} style={{ marginTop: 14, padding: "10px 20px", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Take First Photo</button>
+        </div>
+      )}
+
+      {showAdd && <AddPhotoModal targetDate={addTargetDate} existingCount={(photosByDate[addTargetDate] || []).length} onClose={() => setShowAdd(false)} onAdd={meta => onAdd(meta)} />}
+      {viewing && <PhotoViewer photo={viewing} url={dayUrls[viewing.id]} onClose={() => setViewing(null)} onDelete={id => { onDelete(id); setViewing(null); }} />}
+      {showCompare && sortedCompareDates && <CompareView beforeDate={sortedCompareDates[0]} afterDate={sortedCompareDates[1]} photos={photos} onClose={() => { setShowCompare(false); setCompareMode(false); setCompareDates({ before: null, after: null }); }} />}
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem("nf_theme");
+    if (saved) return saved === "dark";
+    return !window.matchMedia("(prefers-color-scheme: light)").matches;
+  });
+  // Sync COLORS before any child renders (must be in render body, not effect)
+  Object.assign(COLORS, isDark ? DARK_COLORS : LIGHT_COLORS);
+
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("nf_onboarded"));
+
   const [tab, setTab] = useState("dashboard");
-  const [viewMode, setViewMode] = useState("mobile"); // "mobile" | "webapp"
+  const [viewMode, setViewMode] = useState("mobile"); // "mobile" | "webapp" — button hidden, kept for future web layout
   const [showScanner, setShowScanner] = useState(false);
   const [showActiveWorkout, setShowActiveWorkout] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
@@ -1183,32 +1800,87 @@ export default function App() {
   useEffect(() => { localStorage.setItem("nf_routine", JSON.stringify(weeklyRoutine)); }, [weeklyRoutine]);
   useEffect(() => { localStorage.setItem("routineChecks", JSON.stringify(routineChecks)); }, [routineChecks]);
   useEffect(() => { localStorage.setItem("nf_templates", JSON.stringify(routineTemplates)); }, [routineTemplates]);
-  
+  useEffect(() => {
+    localStorage.setItem("nf_theme", isDark ? "dark" : "light");
+    document.body.style.background = isDark ? DARK_COLORS.bg : LIGHT_COLORS.bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", isDark ? "#0a0a0f" : "#f2f2f7");
+  }, [isDark]);
+
+  // ── Water & Photos state ──────────────────────────────────────────────────
+  const [sleepLog, setSleepLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_sleep")) || {}; } catch { return {}; }
+  });
+  const [showSleep, setShowSleep] = useState(false);
+  const [waterLog, setWaterLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_water")) || {}; } catch { return {}; }
+  });
+  const [progressPhotos, setProgressPhotos] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_photos")) || []; } catch { return []; }
+  });
+
+  useEffect(() => { localStorage.setItem("nf_sleep", JSON.stringify(sleepLog)); }, [sleepLog]);
+  useEffect(() => { localStorage.setItem("nf_water", JSON.stringify(waterLog)); }, [waterLog]);
+  useEffect(() => { localStorage.setItem("nf_photos", JSON.stringify(progressPhotos)); }, [progressPhotos]);
+
+  const waterToday = waterLog[todayKey] || 0;
+
+  // ── Greeting ────────────────────────────────────────────────────────────────
+  const greetingHour = new Date().getHours();
+  const greeting = greetingHour >= 5  && greetingHour < 12 ? { text: "Good morning",    emoji: "🌅" }
+                 : greetingHour >= 12 && greetingHour < 17 ? { text: "Good afternoon",   emoji: "☀️" }
+                 : greetingHour >= 17 && greetingHour < 21 ? { text: "Good evening",     emoji: "🌆" }
+                 :                                           { text: "Late night grind",  emoji: "🌙" };
+
+  // ── Sleep ───────────────────────────────────────────────────────────────────
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const sleepEntry = sleepLog[todayKey] || sleepLog[yesterdayKey] || null;
+  const sleepDateLabel = sleepLog[todayKey] ? "Today" : sleepLog[yesterdayKey] ? "Last night" : null;
+  const sleepQualityMeta = sleepEntry ? SLEEP_QUALITY.find(q => q.id === sleepEntry.quality) : null;
+
+  // ── Recovery (from workout timestamps) ─────────────────────────────────────
+  const sortedByRecent = [...workouts].sort((a, b) => b.id - a.id);
+  const lastWorkoutId = sortedByRecent[0]?.id ?? null;
+  const hoursSinceWorkout = lastWorkoutId ? (Date.now() - lastWorkoutId) / 3600000 : null;
+  const recoveryData = (() => {
+    if (hoursSinceWorkout === null) return { pct: null, label: "Log a workout to track recovery", color: COLORS.muted };
+    if (hoursSinceWorkout < 16)    return { pct: 42,   label: "Active recovery recommended",     color: COLORS.warn   };
+    if (hoursSinceWorkout < 30)    return { pct: 65,   label: "Still recovering",                color: COLORS.yellow };
+    if (hoursSinceWorkout < 48)    return { pct: 82,   label: "Ready to train",                  color: COLORS.accent };
+    if (hoursSinceWorkout < 72)    return { pct: 95,   label: "Fully recovered",                 color: COLORS.accent };
+    return                                { pct: 100,  label: "Peak readiness",                  color: COLORS.blue   };
+  })();
+  const waterGoal = profile.waterGoal || 2500;
+
   const maxW = viewMode === "webapp" ? 960 : 480;
   const fmtSec = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: 84 }}>
+    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: "calc(84px + env(safe-area-inset-bottom, 0px))" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { width: 0; height: 0; }
-        select option { background: #1a1a24; }
+        body { color-scheme: ${isDark ? "dark" : "light"}; }
+        select option { background: ${COLORS.card}; color: ${COLORS.text}; }
+        ::placeholder { color: ${COLORS.muted}; opacity: 0.7; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        button { touch-action: manipulation; }
+        input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; }
       `}</style>
 
-      {/* Header */}
-      <div style={{ padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      {/* Header — padded for iOS status bar */}
+      <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600 }}>NourishFit</div>
           <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono', monospace", color: COLORS.text }}>
-            {profile.name ? `Hey, ${profile.name.split(" ")[0]} 👋` : "Good morning 👋"}
+            {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]} ${greeting.emoji}` : `${greeting.text} ${greeting.emoji}`}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setViewMode(v => v === "mobile" ? "webapp" : "mobile")}
-            style={{ fontSize: 10, padding: "4px 9px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 7, color: COLORS.muted, cursor: "pointer", fontWeight: 700 }}>
-            {viewMode === "mobile" ? "⊞ Web" : "📱 Mobile"}
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button onClick={() => setShowOnboarding(true)}
+            style={{ width: 30, height: 30, borderRadius: "50%", background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.muted, fontWeight: 800, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            ?
           </button>
           <div style={{ width: 42, height: 42, borderRadius: "50%", background: COLORS.accentDim, border: `2px solid ${COLORS.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer" }} onClick={() => setTab("profile")}>
             {profile.gender === "female" ? "👩" : "🧑"}
@@ -1229,7 +1901,7 @@ export default function App() {
       )}
 
       {/* Tab Content */}
-      <div style={{ padding: "16px 20px 0", minHeight: "calc(100vh - 168px)" }}>
+      <div style={{ padding: "16px 20px 0", minHeight: "calc(100dvh - 168px)" }}>
 
         {/* ── DASHBOARD ── */}
         {tab === "dashboard" && (
@@ -1239,7 +1911,7 @@ export default function App() {
                 { label: "Calories", value: totalCals, unit: "kcal", color: COLORS.yellow, icon: "⚡" },
                 { label: "Workouts", value: workouts.filter(w => w.date === "Today").length, unit: "today", color: COLORS.accent, icon: "△" },
                 { label: "Supps", value: `${suppsTakenToday}/${supplements.length}`, unit: "taken", color: COLORS.purple, icon: "❋" },
-                { label: "Goal", value: calorieGoal, unit: "target", color: COLORS.blue, icon: "◎" },
+                { label: "Water", value: waterToday >= 1000 ? `${(waterToday/1000).toFixed(1)}L` : `${waterToday}ml`, unit: `/ ${waterGoal/1000}L`, color: COLORS.blue, icon: "💧" },
               ].map(s => (
                 <div key={s.label} style={{ background: COLORS.card, borderRadius: 12, padding: "10px 8px", textAlign: "center", border: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize: 14, marginBottom: 2 }}>{s.icon}</div>
@@ -1357,6 +2029,13 @@ export default function App() {
                 <MacroRing label="Fat"     value={totalFat}     max={macroTargets.fat}      color={COLORS.orange} size={72} />
               </div>
             </div>
+
+            <WaterCard
+              waterToday={waterToday}
+              waterGoal={waterGoal}
+              onAdd={ml => setWaterLog(prev => ({ ...prev, [todayKey]: (prev[todayKey] || 0) + ml }))}
+              onReset={() => setWaterLog(prev => ({ ...prev, [todayKey]: 0 }))}
+            />
 
             <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -1646,15 +2325,50 @@ export default function App() {
               <button onClick={() => setShowInjury(true)} style={{ padding: "8px 14px", background: COLORS.warn, color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Log Symptom</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-              <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>Sleep</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.blue, fontFamily: "'Space Mono',monospace" }}>7.5<span style={{ fontSize: 14, color: COLORS.muted }}>h</span></div>
-                <div style={{ fontSize: 11, color: COLORS.accent }}>↑ Good quality</div>
+              {/* Sleep card */}
+              <div onClick={() => setShowSleep(true)}
+                style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}`, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Sleep</div>
+                  <span style={{ fontSize: 9, color: COLORS.blue, fontWeight: 700, background: `${COLORS.blue}18`, padding: "2px 6px", borderRadius: 99 }}>{sleepEntry ? "Edit" : "+ Log"}</span>
+                </div>
+                {sleepEntry ? (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.blue, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>
+                      {sleepEntry.hours}<span style={{ fontSize: 14, color: COLORS.muted }}>h</span>
+                    </div>
+                    <div style={{ fontSize: 11, marginTop: 4, color: sleepQualityMeta?.color() || COLORS.muted }}>
+                      {sleepQualityMeta?.emoji} {sleepQualityMeta?.label}
+                    </div>
+                    <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{sleepDateLabel}</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.muted, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>—</div>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 6 }}>Tap to log sleep</div>
+                  </>
+                )}
               </div>
+
+              {/* Recovery card */}
               <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>Recovery</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.accent, fontFamily: "'Space Mono',monospace" }}>78<span style={{ fontSize: 14, color: COLORS.muted }}>%</span></div>
-                <div style={{ fontSize: 11, color: COLORS.yellow }}>Moderate load</div>
+                {recoveryData.pct !== null ? (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: recoveryData.color, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>
+                      {recoveryData.pct}<span style={{ fontSize: 14, color: COLORS.muted }}>%</span>
+                    </div>
+                    <div style={{ height: 4, background: COLORS.border, borderRadius: 99, marginTop: 8, marginBottom: 6, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${recoveryData.pct}%`, background: recoveryData.color, borderRadius: 99, transition: "width 1s ease" }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: recoveryData.color }}>{recoveryData.label}</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.muted, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>—</div>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 6, lineHeight: 1.4 }}>{recoveryData.label}</div>
+                  </>
+                )}
               </div>
             </div>
             {/* Active injuries */}
@@ -1715,12 +2429,28 @@ export default function App() {
                 ))}
               </>
             )}
+
           </div>
+        )}
+
+        {/* ── PROGRESS PHOTOS ── */}
+        {tab === "progress" && (
+          <PhotoCalendarPage
+            photos={progressPhotos}
+            onAdd={meta => setProgressPhotos(prev => [meta, ...prev])}
+            onDelete={id => { deletePhoto(id); setProgressPhotos(prev => prev.filter(p => p.id !== id)); }}
+          />
         )}
 
         {/* ── PROFILE ── */}
         {tab === "profile" && (
-          <ProfilePage profile={profile} setProfile={setProfile} />
+          <ProfilePage
+            profile={profile}
+            setProfile={setProfile}
+            isDark={isDark}
+            onToggleTheme={() => setIsDark(d => !d)}
+            onShowTutorial={() => setShowOnboarding(true)}
+          />
         )}
 
       </div>
@@ -1741,7 +2471,7 @@ export default function App() {
 </div>
 
       {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", padding: "10px 0 16px", backdropFilter: "blur(20px)" }}>
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", padding: `10px 0 max(16px, env(safe-area-inset-bottom, 16px))`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
         {NAV.map(n => (
           <button key={n.id} onClick={() => setTab(n.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
             <span style={{ fontSize: 17, filter: tab === n.id ? "none" : "grayscale(1) opacity(0.4)", transition: "all 0.2s" }}>{n.icon}</span>
@@ -1760,6 +2490,14 @@ export default function App() {
       {editingInjury && <UpdateInjuryModal injury={editingInjury} onClose={() => setEditingInjury(null)} onUpdate={inj => { setInjuries(prev => prev.map(i => i.id === inj.id ? inj : i)); setEditingInjury(null); }} />}
       {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }} />}
       {showSessionStart && todayRoutine && <SessionStartPrompt todayRoutine={todayRoutine} onClose={() => setShowSessionStart(false)} onUseRoutine={() => { setShowSessionStart(false); startActiveSession(todayRoutine.exercises, todayRoutine.name, todayRoutine.type); }} onFresh={() => { setShowSessionStart(false); startActiveSession(); }} />}
+      {showOnboarding && <OnboardingModal onComplete={() => { localStorage.setItem("nf_onboarded", "1"); setShowOnboarding(false); }} />}
+      {showSleep && (
+        <LogSleepModal
+          existing={sleepLog[todayKey] || sleepLog[yesterdayKey] || null}
+          onClose={() => setShowSleep(false)}
+          onSave={entry => setSleepLog(prev => ({ ...prev, [todayKey]: entry }))}
+        />
+      )}
     </div>
   );
 }

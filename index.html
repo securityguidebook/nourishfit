@@ -2,9 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nourishfit</title>
+
+    <!-- PWA Icons -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
+
+    <!-- Viewport: cover lets us use safe-area-inset env vars for notch/home bar -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NourishFit" />
+
+    <!-- Android / general PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="application-name" content="NourishFit" />
+
+    <!-- SEO / Share -->
+    <meta name="description" content="AI-powered nutrition and fitness companion" />
+
+    <title>NourishFit</title>
+
+    <style>
+      /* Prevent flash of unstyled content */
+      html, body {
+        background: #0a0a0f;
+        margin: 0;
+        padding: 0;
+        /* Prevent rubber-band / overscroll on iOS */
+        overscroll-behavior: none;
+        /* Full height including safe areas */
+        height: 100%;
+        width: 100%;
+      }
+      #root {
+        height: 100%;
+      }
+      /* Prevent callout on long-press for non-text */
+      * {
+        -webkit-touch-callout: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
