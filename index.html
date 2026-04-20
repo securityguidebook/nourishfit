@@ -18,7 +18,8 @@
 
     <!-- Android / general PWA -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0f" media="(prefers-color-scheme: dark)" />
     <meta name="application-name" content="NourishFit" />
 
     <!-- SEO / Share -->
@@ -27,25 +28,27 @@
     <title>NourishFit</title>
 
     <style>
-      /* Prevent flash of unstyled content */
       html, body {
-        background: #0a0a0f;
+        background: #f2f2f7; /* light default — JS overrides immediately if dark saved */
         margin: 0;
         padding: 0;
-        /* Prevent rubber-band / overscroll on iOS */
         overscroll-behavior: none;
-        /* Full height including safe areas */
         height: 100%;
         width: 100%;
       }
-      #root {
-        height: 100%;
-      }
-      /* Prevent callout on long-press for non-text */
-      * {
-        -webkit-touch-callout: none;
-      }
+      #root { height: 100%; }
+      * { -webkit-touch-callout: none; }
     </style>
+    <script>
+      /* Sync body background before first paint to avoid overscroll flash */
+      (function () {
+        var saved = localStorage.getItem('nf_theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = saved ? saved === 'dark' : prefersDark;
+        document.documentElement.style.background = dark ? '#0a0a0f' : '#f2f2f7';
+        document.body.style.background = dark ? '#0a0a0f' : '#f2f2f7';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

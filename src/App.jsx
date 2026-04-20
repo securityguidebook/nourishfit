@@ -121,7 +121,7 @@ function AuthScreen({ onAuth }) {
   const inputStyle = {
     width: "100%", padding: "14px 16px", background: COLORS.card,
     border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.text,
-    fontSize: 16, outline: "none", marginBottom: 12,
+    fontSize: 16, outline: "none", marginBottom: 12, WebkitAppearance: "none",
   };
 
   return (
@@ -845,6 +845,11 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
             Sign Out
           </button>
         )}
+        <button
+          onClick={() => { if (window.confirm("Reset all local data? This cannot be undone.")) { localStorage.clear(); window.location.reload(); } }}
+          style={{ width: "100%", padding: "11px 0", background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.muted, fontWeight: 600, fontSize: 13, cursor: "pointer", marginTop: 10 }}>
+          Reset Local Data
+        </button>
       </div>
     </div>
   );
@@ -1730,7 +1735,7 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem("nf_theme");
     if (saved) return saved === "dark";
-    return !window.matchMedia("(prefers-color-scheme: light)").matches;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   // Sync COLORS before any child renders (must be in render body, not effect)
   Object.assign(COLORS, isDark ? DARK_COLORS : LIGHT_COLORS);
@@ -1973,7 +1978,7 @@ export default function App() {
         ::placeholder { color: ${COLORS.muted}; opacity: 0.7; }
         @keyframes spin { to { transform: rotate(360deg); } }
         button { touch-action: manipulation; }
-        input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; }
+        input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; font-size: 16px !important; }
       `}</style>
 
       {/* Header — padded for iOS status bar */}
@@ -2562,21 +2567,6 @@ export default function App() {
         )}
 
       </div>
-
-      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
-  <p style={{ margin: "0 0 12px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Data</p>
-  <button
-    onClick={() => {
-      if (window.confirm("Reset all app data? This cannot be undone.")) {
-        localStorage.clear();
-        window.location.reload();
-      }
-    }}
-    style={{ width: "100%", padding: "10px", background: COLORS.warn + "22", border: `1px solid ${COLORS.warn}`, borderRadius: 12, color: COLORS.warn, cursor: "pointer", fontSize: 13, fontWeight: 700 }}
-  >
-    🗑️ Reset All Data
-  </button>
-</div>
 
       {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", padding: `10px 0 max(16px, env(safe-area-inset-bottom, 16px))`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
