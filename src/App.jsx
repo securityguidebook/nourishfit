@@ -1968,7 +1968,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: "calc(84px + env(safe-area-inset-bottom, 0px))" }}>
+    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: "calc(110px + env(safe-area-inset-bottom, 0px))" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -2013,7 +2013,7 @@ export default function App() {
       )}
 
       {/* Tab Content */}
-      <div style={{ padding: "16px 20px 0", minHeight: "calc(100dvh - 168px)" }}>
+      <div style={{ padding: "16px 20px 0" }}>
 
         {/* ── DASHBOARD ── */}
         {tab === "dashboard" && (

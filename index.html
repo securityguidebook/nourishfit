@@ -29,14 +29,12 @@
 
     <style>
       html, body {
-        background: #f2f2f7; /* light default — JS overrides immediately if dark saved */
+        background: #f2f2f7;
         margin: 0;
         padding: 0;
         overscroll-behavior: none;
-        height: 100%;
-        width: 100%;
+        /* No height:100% — that clips scrollable content on iOS */
       }
-      #root { height: 100%; }
       * { -webkit-touch-callout: none; }
     </style>
     <script>
