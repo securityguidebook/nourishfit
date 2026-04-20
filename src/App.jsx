@@ -1749,6 +1749,55 @@ export default function App() {
     return unsub;
   }, []);
 
+  // Load profile from Supabase when session first becomes available
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    supabase.from("profiles").select("*").eq("id", authSession.user.id).single()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        const merged = dbToProfile(data);
+        setProfile(p => ({ ...p, ...merged }));
+        localStorage.setItem("nf_profile", JSON.stringify({ ...merged }));
+      });
+  }, [authSession?.user?.id]);
+
+  // ── Profile sync helpers ────────────────────────────────────────────────────
+  const EMPTY_PROFILE = { name: "", age: "", gender: "male", weight: "", weightUnit: "kg", height: "", heightUnit: "cm", goal: "maintain", activityLevel: "moderate", cheatDays: 1 };
+
+  function dbToProfile(row) {
+    return {
+      name:          row.name          ?? "",
+      age:           row.age           ?? "",
+      gender:        row.gender        ?? "male",
+      weight:        row.weight        ?? "",
+      weightUnit:    row.weight_unit   ?? "kg",
+      height:        row.height        ?? "",
+      heightUnit:    row.height_unit   ?? "cm",
+      goal:          row.goal          ?? "maintain",
+      activityLevel: row.activity_level ?? "moderate",
+      cheatDays:     row.cheat_days    ?? 1,
+      waterGoal:     row.water_goal    ?? 2500,
+    };
+  }
+
+  function profileToDb(p, userId) {
+    return {
+      id:             userId,
+      name:           p.name          || null,
+      age:            p.age           ? parseInt(p.age) : null,
+      gender:         p.gender        || "male",
+      weight:         p.weight        ? parseFloat(p.weight) : null,
+      weight_unit:    p.weightUnit    || "kg",
+      height:         p.height        ? parseFloat(p.height) : null,
+      height_unit:    p.heightUnit    || "cm",
+      goal:           p.goal          || "maintain",
+      activity_level: p.activityLevel || "moderate",
+      cheat_days:     p.cheatDays     ?? 1,
+      water_goal:     p.waterGoal     ?? 2500,
+      updated_at:     new Date().toISOString(),
+    };
+  }
+
   // ── Onboarding ─────────────────────────────────────────────────────────────
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("nf_onboarded"));
 
@@ -1897,7 +1946,14 @@ export default function App() {
   useEffect(() => { localStorage.setItem("nf_workouts", JSON.stringify(workouts)); }, [workouts]);
   useEffect(() => { localStorage.setItem("nf_injuries", JSON.stringify(injuries)); }, [injuries]);
   useEffect(() => { localStorage.setItem("nf_supplements", JSON.stringify(supplements)); }, [supplements]);
-  useEffect(() => { localStorage.setItem("nf_profile", JSON.stringify(profile)); }, [profile]);
+  // Profile → localStorage (always) + Supabase (when signed in)
+  useEffect(() => {
+    localStorage.setItem("nf_profile", JSON.stringify(profile));
+    if (!supabase || !authSession?.user?.id) return;
+    supabase.from("profiles").upsert(profileToDb(profile, authSession.user.id)).then(({ error }) => {
+      if (error) console.warn("Profile sync failed:", error.message);
+    });
+  }, [profile, authSession]);
   useEffect(() => { localStorage.setItem("nf_routine", JSON.stringify(weeklyRoutine)); }, [weeklyRoutine]);
   useEffect(() => { localStorage.setItem("routineChecks", JSON.stringify(routineChecks)); }, [routineChecks]);
   useEffect(() => { localStorage.setItem("nf_templates", JSON.stringify(routineTemplates)); }, [routineTemplates]);
