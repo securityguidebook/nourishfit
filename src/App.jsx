@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import imageCompression from "browser-image-compression";
 import { savePhoto, loadPhoto, deletePhoto } from "./db.js";
+import { supabase, signIn, signUp, signOut, onAuthChange } from "./lib/supabase.js";
 
 const DARK_COLORS = {
   bg: "#0a0a0f",
@@ -77,6 +78,86 @@ function OnboardingModal({ onComplete }) {
           style={{ width: "100%", padding: "16px 0", background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
           {isLast ? "Let's Go 🚀" : "Next →"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Auth Screen ──────────────────────────────────────────────────────────────
+
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(""); setInfo("");
+    setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { data, error: err } = await signUp(email, password);
+        if (err) { setError(err.message); return; }
+        if (data?.user && !data.session) {
+          setInfo("Check your email to confirm your account, then sign in.");
+          setMode("signin");
+          return;
+        }
+        if (data?.session) onAuth(data.session, name.trim());
+      } else {
+        const { data, error: err } = await signIn(email, password);
+        if (err) { setError(err.message); return; }
+        if (data?.session) onAuth(data.session, null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputStyle = {
+    width: "100%", padding: "14px 16px", background: COLORS.card,
+    border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.text,
+    fontSize: 16, outline: "none", marginBottom: 12,
+  };
+
+  return (
+    <div style={{ minHeight: "100dvh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 24px calc(24px + env(safe-area-inset-bottom,0px))" }}>
+      <div style={{ fontSize: 42, marginBottom: 8 }}>💪</div>
+      <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.text, marginBottom: 4 }}>NourishFit</div>
+      <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 36 }}>Your AI fitness & nutrition coach</div>
+
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ display: "flex", background: COLORS.card, borderRadius: 12, padding: 4, marginBottom: 24 }}>
+          {["signin", "signup"].map(m => (
+            <button key={m} onClick={() => { setMode(m); setError(""); setInfo(""); }}
+              style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "none", background: mode === m ? COLORS.accent : "transparent", color: mode === m ? "#000" : COLORS.muted, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.2s" }}>
+              {m === "signin" ? "Sign In" : "Sign Up"}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          {mode === "signup" && (
+            <input value={name} onChange={e => setName(e.target.value)}
+              placeholder="Your name (optional)" style={inputStyle} autoComplete="name" />
+          )}
+          <input value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="Email" type="email" required style={inputStyle} autoComplete="email" autoCapitalize="none" />
+          <input value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="Password" type="password" required style={{ ...inputStyle, marginBottom: 20 }} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+
+          {error && <div style={{ color: COLORS.warn, fontSize: 13, marginBottom: 14, textAlign: "center" }}>{error}</div>}
+          {info  && <div style={{ color: COLORS.accent, fontSize: 13, marginBottom: 14, textAlign: "center" }}>{info}</div>}
+
+          <button type="submit" disabled={loading}
+            style={{ width: "100%", padding: "16px 0", background: loading ? COLORS.border : COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 16, cursor: loading ? "not-allowed" : "pointer", transition: "background 0.2s" }}>
+            {loading ? "..." : mode === "signin" ? "Sign In" : "Create Account"}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -600,7 +681,7 @@ function AICoach() {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial }) {
+function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial, onSignOut }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(profile);
 
@@ -758,6 +839,12 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
           style={{ width: "100%", padding: "11px 0", background: `${COLORS.blue}18`, border: `1px solid ${COLORS.blue}44`, borderRadius: 12, color: COLORS.blue, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
           View App Tutorial
         </button>
+        {onSignOut && (
+          <button onClick={onSignOut}
+            style={{ width: "100%", padding: "11px 0", background: `${COLORS.warn}18`, border: `1px solid ${COLORS.warn}44`, borderRadius: 12, color: COLORS.warn, fontWeight: 700, fontSize: 14, cursor: "pointer", marginTop: 10 }}>
+            Sign Out
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1648,6 +1735,15 @@ export default function App() {
   // Sync COLORS before any child renders (must be in render body, not effect)
   Object.assign(COLORS, isDark ? DARK_COLORS : LIGHT_COLORS);
 
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  const [authSession, setAuthSession] = useState(undefined); // undefined = loading, null = logged out
+  useEffect(() => {
+    if (!supabase) { setAuthSession(null); return; }
+    supabase.auth.getSession().then(({ data }) => setAuthSession(data.session ?? null));
+    const unsub = onAuthChange(s => setAuthSession(s ?? null));
+    return unsub;
+  }, []);
+
   // ── Onboarding ─────────────────────────────────────────────────────────────
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("nf_onboarded"));
 
@@ -1854,6 +1950,17 @@ export default function App() {
 
   const maxW = viewMode === "webapp" ? 960 : 480;
   const fmtSec = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+  // ── Auth gate (after all hooks) ─────────────────────────────────────────────
+  if (authSession === undefined) {
+    return <div style={{ minHeight: "100dvh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.muted, fontSize: 14 }}>Loading…</div>;
+  }
+  if (supabase && authSession === null) {
+    return <AuthScreen onAuth={(session, name) => {
+      setAuthSession(session);
+      if (name) setProfile(p => ({ ...p, name }));
+    }} />;
+  }
 
   return (
     <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: "calc(84px + env(safe-area-inset-bottom, 0px))" }}>
@@ -2450,6 +2557,7 @@ export default function App() {
             isDark={isDark}
             onToggleTheme={() => setIsDark(d => !d)}
             onShowTutorial={() => setShowOnboarding(true)}
+            onSignOut={supabase ? async () => { await signOut(); setAuthSession(null); } : null}
           />
         )}
 
