@@ -1986,7 +1986,7 @@ export default function App() {
         <div>
           <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600 }}>NourishFit</div>
           <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono', monospace", color: COLORS.text }}>
-            {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]} ${greeting.emoji}` : `${greeting.text} ${greeting.emoji}`}
+            {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]}` : greeting.text}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
