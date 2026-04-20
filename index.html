@@ -8,8 +8,8 @@
     <link rel="icon" href="/logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
 
-    <!-- Viewport: cover lets us use safe-area-inset env vars for notch/home bar -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Viewport: cover for notch/home bar; user-scalable=no gives native app feel -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -33,9 +33,10 @@
         margin: 0;
         padding: 0;
         overscroll-behavior: none;
+        overflow-x: hidden;
         /* No height:100% — that clips scrollable content on iOS */
       }
-      * { -webkit-touch-callout: none; }
+      * { -webkit-touch-callout: none; box-sizing: border-box; }
     </style>
     <script>
       /* Sync body background before first paint to avoid overscroll flash */

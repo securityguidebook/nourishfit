@@ -83,6 +83,62 @@ function OnboardingModal({ onComplete }) {
   );
 }
 
+// ─── Renovation Tour (v0.9.3) ─────────────────────────────────────────────────
+// Update TOUR_STEPS and bump nf_renovated key on next meaningful release.
+
+const TOUR_STEPS = [
+  {
+    tab: null,
+    highlight: null,
+    title: "The gym's been renovated.",
+    body: "Hey — Coach here. I've been putting in work while you were away. New layout, smarter tracking, cloud sync. I'm taking you through it right now.",
+  },
+  {
+    tab: "dashboard",
+    highlight: "bottom-nav",
+    title: "Your new home base.",
+    body: "This bar covers everything. Track holds Nutrition & Workout. Wellbeing holds Health & Supplements. One tap gets you anywhere.",
+  },
+  {
+    tab: "nutrition",
+    highlight: "pill",
+    title: "The switcher pill.",
+    body: "See that pill in the top-right? Tap it to flip between Nutrition and Workout while you're in Track — same logic for the Wellbeing group.",
+  },
+  {
+    tab: "nutrition",
+    highlight: "nutrition-subtabs",
+    nutritionView: "history",
+    title: "History and Trends.",
+    body: "Meals and water now sync to your account. These tabs let you browse every logged day or pull a 7-day breakdown of calories, water, and macros.",
+  },
+  {
+    tab: "workout",
+    highlight: "workout-history",
+    title: "Collapsible sessions.",
+    body: "Each session card collapses. Tap one to expand it. Mid-session you can also delete individual sets before marking them done.",
+  },
+  {
+    tab: "health",
+    highlight: "recovery-card",
+    title: "Smarter recovery.",
+    body: "Recovery now reads like a smartwatch — Rest, Low, Moderate, Good, Optimal. It factors in your sleep, training load, and time since your last session.",
+  },
+  {
+    tab: "supplements",
+    highlight: "supplements-list",
+    title: "Rolling dose tracking.",
+    body: "Supplements roll day by day. Tap the check to log a dose — tap again if you doubled up. The 7-day strip shows your full history at a glance.",
+  },
+  {
+    tab: "profile",
+    highlight: "help-section",
+    title: "Need a hand?",
+    body: "Anything you're unsure about — scroll to the bottom of Profile. Help is right there. That's the full tour. Now go get after it.",
+    isLast: true,
+  },
+];
+
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 
 function AuthScreen({ onAuth }) {
@@ -173,6 +229,25 @@ const NAV = [
   { id: "progress", icon: "◫", label: "Progress" },
   { id: "profile", icon: "◉", label: "Profile" },
 ];
+
+const BOTTOM_NAV = [
+  { id: "dashboard", icon: "⊞", label: "Home" },
+  { id: "track",     icon: "◎", label: "Track",     group: ["nutrition", "workout"] },
+  { id: "coach",     icon: "✦", label: "Coach" },
+  { id: "progress",  icon: "◫", label: "Progress" },
+  { id: "wellbeing", icon: "♡", label: "Wellbeing", group: ["health", "supplements"] },
+];
+
+const GROUP_ITEMS = {
+  track: [
+    { id: "nutrition",    icon: "◎", label: "Nutrition" },
+    { id: "workout",      icon: "△", label: "Workout"   },
+  ],
+  wellbeing: [
+    { id: "health",       icon: "♡", label: "Health" },
+    { id: "supplements",  icon: "❋", label: "Supps"  },
+  ],
+};
 
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -681,7 +756,10 @@ function AICoach() {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial, onSignOut }) {
+function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial, onSignOut, tourHL }) {
+  const hlProfile = (id) => tourHL === id
+    ? { outline: `2px solid ${COLORS.accent}`, outlineOffset: 3, borderRadius: 14, animation: "tourPulse 1.8s ease-in-out infinite" }
+    : {};
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(profile);
 
@@ -833,7 +911,7 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
       </div>
 
       {/* Help */}
-      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}`, ...hlProfile("help-section") }}>
         <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Help</p>
         <button onClick={onShowTutorial}
           style={{ width: "100%", padding: "11px 0", background: `${COLORS.blue}18`, border: `1px solid ${COLORS.blue}44`, borderRadius: 12, color: COLORS.blue, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
@@ -990,6 +1068,7 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
     updateEx(idx, e => ({ ...e, sets: [...e.sets, { id: Date.now(), reps: last?.reps || "", weight: last?.weight || "", done: false }] }));
   };
   const updateSetField = (exIdx, setId, field, val) => updateEx(exIdx, e => ({ ...e, sets: e.sets.map(s => s.id === setId ? { ...s, [field]: val } : s) }));
+  const removeSet = (exIdx, setId) => updateEx(exIdx, e => ({ ...e, sets: e.sets.filter(s => s.id !== setId) }));
 
   const completeSet = (exIdx, setId) => {
     const ex = session.exercises[exIdx];
@@ -1143,16 +1222,16 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
 
               {ex.sets.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px", gap: 6, marginBottom: 4 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px 24px", gap: 6, marginBottom: 4 }}>
                     <div /><div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textAlign: "center" }}>REPS</div>
-                    <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textAlign: "center" }}>KG</div><div />
+                    <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700, textAlign: "center" }}>KG</div><div /><div />
                   </div>
                   {ex.sets.map((set, si) => {
                     const isActive = si === nextIdx;
                     const isDone = set.done;
                     const isLocked = !isDone && !isActive;
                     return (
-                      <div key={set.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                      <div key={set.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 34px 24px", gap: 6, marginBottom: 6, alignItems: "center" }}>
                         <div style={{ fontSize: 10, color: isDone ? COLORS.accent : COLORS.muted, fontWeight: 700, textAlign: "center" }}>S{si+1}</div>
                         <input type="number" value={set.reps} onChange={e => updateSetField(idx, set.id, "reps", e.target.value)} disabled={isDone}
                           style={{ ...cellInput, border: `1px solid ${isDone ? COLORS.accent + "44" : COLORS.border}`, color: isDone ? COLORS.muted : COLORS.text, opacity: isLocked ? 0.45 : 1 }} placeholder="—" />
@@ -1162,6 +1241,12 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
                           style={{ width: 32, height: 32, borderRadius: 8, border: `2px solid ${isDone ? COLORS.accent : isActive ? COLORS.accent : COLORS.border}`, background: isDone ? COLORS.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: isActive ? "pointer" : "default", opacity: isLocked ? 0.3 : 1 }}>
                           {isDone && <span style={{ color: "#000", fontSize: 14, fontWeight: 900 }}>✓</span>}
                         </button>
+                        {!isDone ? (
+                          <button onClick={() => removeSet(idx, set.id)}
+                            style={{ width: 22, height: 22, borderRadius: 6, border: "none", background: "transparent", color: COLORS.muted, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                            ✕
+                          </button>
+                        ) : <div />}
                       </div>
                     );
                   })}
@@ -1798,10 +1883,81 @@ export default function App() {
     };
   }
 
+  // ── Meals + Water Supabase sync ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    const uid = authSession.user.id;
+    supabase.from("meals").select("*").eq("user_id", uid).order("logged_date", { ascending: false })
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const fromDb = data.map(r => ({ id: r.id, name: r.name, time: r.time || "", calories: r.calories || 0, protein: Number(r.protein) || 0, carbs: Number(r.carbs) || 0, fat: Number(r.fat) || 0, img: r.img || "🍽️", logged_date: r.logged_date }));
+        setMeals(prev => {
+          const dbIds = new Set(fromDb.map(m => m.id));
+          const localOnly = prev.filter(m => !dbIds.has(m.id));
+          return [...fromDb, ...localOnly].sort((a, b) => b.id - a.id);
+        });
+      });
+    supabase.from("water_log").select("*").eq("user_id", uid)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        setWaterLog(prev => {
+          const merged = { ...prev };
+          data.forEach(r => { merged[r.date] = r.ml; });
+          return merged;
+        });
+      });
+  }, [authSession?.user?.id]);
+
   // ── Onboarding ─────────────────────────────────────────────────────────────
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("nf_onboarded"));
+  const [tourStep, setTourStep] = useState(() =>
+    localStorage.getItem("nf_onboarded") === "1" && !localStorage.getItem("nf_renovated_v093") ? 0 : null
+  );
 
   const [tab, setTab] = useState("dashboard");
+  const [nutritionView, setNutritionView] = useState("today");
+  const [lastTrackTab, setLastTrackTab] = useState(() => localStorage.getItem("nf_last_track") || "nutrition");
+  const [lastWellbeingTab, setLastWellbeingTab] = useState(() => localStorage.getItem("nf_last_wellbeing") || "health");
+  const [showPillDropdown, setShowPillDropdown] = useState(false);
+
+  const navigateTo = (id) => {
+    setTab(id);
+    if (id === "nutrition" || id === "workout") {
+      setLastTrackTab(id);
+      localStorage.setItem("nf_last_track", id);
+    } else if (id === "health" || id === "supplements") {
+      setLastWellbeingTab(id);
+      localStorage.setItem("nf_last_wellbeing", id);
+    }
+  };
+
+  const dismissTour = () => {
+    localStorage.setItem("nf_renovated_v093", "1");
+    setTourStep(null);
+  };
+
+  const advanceTour = () => {
+    const next = tourStep + 1;
+    if (next >= TOUR_STEPS.length) { dismissTour(); return; }
+    const s = TOUR_STEPS[next];
+    if (s.tab) { setTab(s.tab); if (s.tab === "nutrition" || s.tab === "workout") setLastTrackTab(s.tab); else if (s.tab === "health" || s.tab === "supplements") setLastWellbeingTab(s.tab); }
+    if (s.nutritionView) setNutritionView(s.nutritionView);
+    setTourStep(next);
+  };
+
+  const backTour = () => {
+    const prev = tourStep - 1;
+    if (prev < 0) return;
+    const s = TOUR_STEPS[prev];
+    if (s.tab) { setTab(s.tab); if (s.tab === "nutrition" || s.tab === "workout") setLastTrackTab(s.tab); else if (s.tab === "health" || s.tab === "supplements") setLastWellbeingTab(s.tab); }
+    if (s.nutritionView) setNutritionView(s.nutritionView);
+    setTourStep(prev);
+  };
+
+  const tourHL = tourStep !== null ? TOUR_STEPS[tourStep]?.highlight : null;
+  const hl = (id) => tourHL === id
+    ? { outline: `2px solid ${COLORS.accent}`, outlineOffset: 3, borderRadius: 14, animation: "tourPulse 1.8s ease-in-out infinite" }
+    : {};
   const [viewMode, setViewMode] = useState("mobile"); // "mobile" | "webapp" — button hidden, kept for future web layout
   const [showScanner, setShowScanner] = useState(false);
   const [showActiveWorkout, setShowActiveWorkout] = useState(false);
@@ -1820,14 +1976,18 @@ export default function App() {
   const [, setSessionTick] = useState(0);
 
   const [meals, setMeals] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nf_meals")) || []; }
-    catch { return []; }
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const stored = JSON.parse(localStorage.getItem("nf_meals")) || [];
+      return stored.map(m => m.logged_date ? m : { ...m, logged_date: today });
+    } catch { return []; }
   });
 
   const [workouts, setWorkouts] = useState(() => {
     try { return JSON.parse(localStorage.getItem("nf_workouts")) || []; }
     catch { return []; }
   });
+  const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
 
   const [injuries, setInjuries] = useState(() => {
     try { return JSON.parse(localStorage.getItem("nf_injuries")) || []; }
@@ -1864,10 +2024,12 @@ export default function App() {
     }
   });
 
-  const totalCals = meals.reduce((s, m) => s + m.calories, 0);
-  const totalProtein = meals.reduce((s, m) => s + m.protein, 0);
-  const totalCarbs = meals.reduce((s, m) => s + m.carbs, 0);
-  const totalFat = meals.reduce((s, m) => s + m.fat, 0);
+  const _todayKeyEarly = new Date().toISOString().slice(0, 10);
+  const todayMeals = meals.filter(m => (m.logged_date || _todayKeyEarly) === _todayKeyEarly);
+  const totalCals = todayMeals.reduce((s, m) => s + m.calories, 0);
+  const totalProtein = todayMeals.reduce((s, m) => s + m.protein, 0);
+  const totalCarbs = todayMeals.reduce((s, m) => s + m.carbs, 0);
+  const totalFat = todayMeals.reduce((s, m) => s + m.fat, 0);
 
   const bmr = (() => {
     const wKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
@@ -2000,12 +2162,54 @@ export default function App() {
   const lastWorkoutId = sortedByRecent[0]?.id ?? null;
   const hoursSinceWorkout = lastWorkoutId ? (Date.now() - lastWorkoutId) / 3600000 : null;
   const recoveryData = (() => {
-    if (hoursSinceWorkout === null) return { pct: null, label: "Log a workout to track recovery", color: COLORS.muted };
-    if (hoursSinceWorkout < 16)    return { pct: 42,   label: "Active recovery recommended",     color: COLORS.warn   };
-    if (hoursSinceWorkout < 30)    return { pct: 65,   label: "Still recovering",                color: COLORS.yellow };
-    if (hoursSinceWorkout < 48)    return { pct: 82,   label: "Ready to train",                  color: COLORS.accent };
-    if (hoursSinceWorkout < 72)    return { pct: 95,   label: "Fully recovered",                 color: COLORS.accent };
-    return                                { pct: 100,  label: "Peak readiness",                  color: COLORS.blue   };
+    const LEVELS = [
+      { label: "Rest",     rec: "Skip training — sleep and stretch only",           color: () => COLORS.warn   },
+      { label: "Low",      rec: "Active recovery — walk, foam roll, light stretch",  color: () => COLORS.orange },
+      { label: "Moderate", rec: "Light to moderate session only",                    color: () => COLORS.yellow },
+      { label: "Good",     rec: "Ready for a solid training session",                color: () => COLORS.accent },
+      { label: "Optimal",  rec: "Peak window — go hard today",                       color: () => COLORS.blue   },
+    ];
+
+    // Base score from time since last workout (0–4 scale)
+    let score = hoursSinceWorkout === null ? 3
+      : hoursSinceWorkout < 8  ? 0
+      : hoursSinceWorkout < 16 ? 1
+      : hoursSinceWorkout < 24 ? 2
+      : hoursSinceWorkout < 48 ? 3
+      : 4;
+
+    const factors = [];
+
+    // Sleep modifier
+    if (sleepEntry) {
+      const h = parseFloat(sleepEntry.hours) || 7;
+      if (h < 5)      { score -= 2; factors.push({ text: `${h}h sleep — very low`, bad: true }); }
+      else if (h < 6) { score -= 1; factors.push({ text: `${h}h sleep — low`, bad: true }); }
+      else if (h >= 7){ factors.push({ text: `${h}h sleep`, bad: false }); }
+      else            { factors.push({ text: `${h}h sleep`, bad: false }); }
+
+      if (sleepEntry.quality === "poor")  { score -= 1; factors.push({ text: "Poor sleep quality", bad: true }); }
+      else if (sleepEntry.quality === "great") { score += 1; factors.push({ text: "Great sleep quality", bad: false }); }
+    } else {
+      factors.push({ text: "No sleep logged", bad: false });
+    }
+
+    // Training load — workouts in last 3 days
+    const threeDaysAgo = Date.now() - 3 * 86400000;
+    const recentCount = workouts.filter(w => w.id > threeDaysAgo).length;
+    if (recentCount >= 3)      { score -= 2; factors.push({ text: `${recentCount} sessions in 3 days`, bad: true }); }
+    else if (recentCount === 2){ score -= 1; factors.push({ text: "2 sessions recently", bad: false }); }
+    else if (recentCount === 0){ score += 1; factors.push({ text: "Well rested — no recent sessions", bad: false }); }
+    else                       { factors.push({ text: "1 recent session", bad: false }); }
+
+    // Time context
+    if (hoursSinceWorkout !== null) {
+      const h = Math.round(hoursSinceWorkout);
+      factors.push({ text: `${h < 24 ? `${h}h` : `${Math.round(h/24)}d`} since last session`, bad: hoursSinceWorkout < 16 });
+    }
+
+    score = Math.max(0, Math.min(4, score));
+    return { ...LEVELS[score], score, factors, noData: hoursSinceWorkout === null && !sleepEntry };
   })();
   const waterGoal = profile.waterGoal || 2500;
 
@@ -2024,7 +2228,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, margin: "0 auto", paddingBottom: "calc(110px + env(safe-area-inset-bottom, 0px))" }}>
+    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, width: "100%", margin: "0 auto", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", overflowX: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -2033,24 +2237,61 @@ export default function App() {
         select option { background: ${COLORS.card}; color: ${COLORS.text}; }
         ::placeholder { color: ${COLORS.muted}; opacity: 0.7; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes tourPulse { 0%,100% { outline-color: ${COLORS.accent}; outline-width: 2px; } 50% { outline-color: ${COLORS.accent}88; outline-width: 3px; } }
         button { touch-action: manipulation; }
         input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; font-size: 16px !important; }
       `}</style>
 
       {/* Header — padded for iOS status bar */}
       <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600 }}>NourishFit</div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Space Mono', monospace", color: COLORS.text }}>
-            {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]}` : greeting.text}
-          </div>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+          <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, fontFamily: "'Space Mono', monospace" }}>NourishFit</div>
+          {tab === "dashboard" && (
+            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
+              {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]}` : greeting.text}
+            </div>
+          )}
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={() => setShowOnboarding(true)}
-            style={{ width: 30, height: 30, borderRadius: "50%", background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.muted, fontWeight: 800, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            ?
-          </button>
-          <div style={{ width: 42, height: 42, borderRadius: "50%", background: COLORS.accentDim, border: `2px solid ${COLORS.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer" }} onClick={() => setTab("profile")}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          {/* Sub-tab switcher pill — only visible when inside a group tab */}
+          {(() => {
+            const trackGroup = ["nutrition", "workout"];
+            const wellbeingGroup = ["health", "supplements"];
+            const inTrack = trackGroup.includes(tab);
+            const inWellbeing = wellbeingGroup.includes(tab);
+            if (!inTrack && !inWellbeing) return null;
+            const groupItems = (inTrack ? trackGroup : wellbeingGroup).map(id => NAV.find(n => n.id === id));
+            const currentNav = NAV.find(n => n.id === tab);
+            return (
+              <div style={{ position: "relative", ...hl("pill") }}>
+                <button onClick={() => setShowPillDropdown(v => !v)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", background: showPillDropdown ? COLORS.accentDim : COLORS.card, border: `1px solid ${showPillDropdown ? COLORS.accent : COLORS.border}`, borderRadius: 99, cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
+                  <span style={{ fontSize: 13, lineHeight: 1 }}>{currentNav?.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: showPillDropdown ? COLORS.accent : COLORS.text }}>{currentNav?.label}</span>
+                  <span style={{ fontSize: 9, color: COLORS.muted, lineHeight: 1, transition: "transform 0.2s", display: "inline-block", transform: showPillDropdown ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                </button>
+                {showPillDropdown && (
+                  <>
+                    <div style={{ position: "fixed", inset: 0, zIndex: 499 }} onClick={() => setShowPillDropdown(false)} />
+                    <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 500, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden", minWidth: 148, boxShadow: "0 8px 24px #0003" }}>
+                      {groupItems.map((n, i) => {
+                        const isActive = tab === n.id;
+                        return (
+                          <button key={n.id} onClick={() => { navigateTo(n.id); setShowPillDropdown(false); }}
+                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: isActive ? COLORS.accentDim : "transparent", border: "none", borderBottom: i < groupItems.length - 1 ? `1px solid ${COLORS.border}` : "none", cursor: "pointer", textAlign: "left" }}>
+                            <span style={{ fontSize: 16, lineHeight: 1 }}>{n.icon}</span>
+                            <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 500, color: isActive ? COLORS.accent : COLORS.text }}>{n.label}</span>
+                            {isActive && <span style={{ marginLeft: "auto", fontSize: 10, color: COLORS.accent }}>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: COLORS.accentDim, border: `2px solid ${COLORS.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, cursor: "pointer", flexShrink: 0 }} onClick={() => setTab("profile")}>
             {profile.gender === "female" ? "👩" : "🧑"}
           </div>
         </div>
@@ -2158,13 +2399,13 @@ export default function App() {
             ))}
 
             <p style={{ margin: "14px 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Meals</p>
-            {meals.length === 0 ? (
+            {todayMeals.length === 0 ? (
               <div style={{ background: COLORS.card, borderRadius: 12, padding: 20, marginBottom: 8, border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
                 <div style={{ fontSize: 28, marginBottom: 6 }}>◎</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>No meals logged yet</div>
                 <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Tap Nutrition to scan or log a meal</div>
               </div>
-            ) : meals.map(m => (
+            ) : todayMeals.map(m => (
               <div key={m.id} style={{ background: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 22 }}>{m.img}</span>
@@ -2180,95 +2421,323 @@ export default function App() {
         )}
 
         {/* ── NUTRITION ── */}
-        {tab === "nutrition" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Nutrition</h2>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setShowManualMeal(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Manual</button>
-                <button onClick={() => setShowScanner(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 Scan</button>
-              </div>
-            </div>
-            <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
-              <CalorieBar consumed={totalCals} goal={calorieGoal} />
-              <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16 }}>
-                <MacroRing label="Protein" value={totalProtein} max={macroTargets.protein} color={COLORS.accent} size={72} />
-                <MacroRing label="Carbs"   value={totalCarbs}   max={macroTargets.carbs}   color={COLORS.blue}   size={72} />
-                <MacroRing label="Fat"     value={totalFat}     max={macroTargets.fat}      color={COLORS.orange} size={72} />
-              </div>
-            </div>
+        {tab === "nutrition" && (() => {
+          const deleteMeal = (id) => {
+            setMeals(prev => prev.filter(m => m.id !== id));
+            if (supabase && authSession?.user?.id) supabase.from("meals").delete().eq("id", id);
+          };
+          const addWater = (ml) => {
+            const newTotal = (waterLog[todayKey] || 0) + ml;
+            setWaterLog(prev => ({ ...prev, [todayKey]: newTotal }));
+            if (supabase && authSession?.user?.id) supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: newTotal });
+          };
+          const resetWater = () => {
+            setWaterLog(prev => ({ ...prev, [todayKey]: 0 }));
+            if (supabase && authSession?.user?.id) supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: 0 });
+          };
 
-            <WaterCard
-              waterToday={waterToday}
-              waterGoal={waterGoal}
-              onAdd={ml => setWaterLog(prev => ({ ...prev, [todayKey]: (prev[todayKey] || 0) + ml }))}
-              onReset={() => setWaterLog(prev => ({ ...prev, [todayKey]: 0 }))}
-            />
+          // History: group meals by date, sorted newest first
+          const mealsByDate = meals.reduce((acc, m) => {
+            const d = m.logged_date || todayKey;
+            if (!acc[d]) acc[d] = [];
+            acc[d].push(m);
+            return acc;
+          }, {});
+          const historyDates = Object.keys(mealsByDate).sort((a, b) => b.localeCompare(a));
 
-            <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Daily Targets</p>
-                <span style={{ fontSize: 10, color: COLORS.accent, fontWeight: 700 }}>{profile.goal === "lose" ? "Cut 🔥" : profile.goal === "gain" ? "Bulk 💪" : "Maintain ⚖️"}</span>
-              </div>
-              {[
-                { label: "Calories",  value: `${calorieGoal} kcal`,       sub: `TDEE ${tdee} kcal`,                               color: COLORS.yellow },
-                { label: "Protein",   value: `${macroTargets.protein}g`,  sub: `${Math.round(macroTargets.protein * 4)} kcal · 30%`, color: COLORS.accent },
-                { label: "Carbs",     value: `${macroTargets.carbs}g`,    sub: `${Math.round(macroTargets.carbs * 4)} kcal · 40%`,   color: COLORS.blue },
-                { label: "Fat",       value: `${macroTargets.fat}g`,      sub: `${Math.round(macroTargets.fat * 9)} kcal · 30%`,     color: COLORS.orange },
-              ].map(row => (
-                <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{row.label}</span>
-                  <div style={{ textAlign: "right" }}>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: row.color, fontFamily: "'Space Mono',monospace" }}>{row.value}</span>
-                    <span style={{ fontSize: 10, color: COLORS.muted, marginLeft: 6 }}>{row.sub}</span>
+          // Trends: last 7 days
+          const last7 = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(); d.setDate(d.getDate() - (6 - i));
+            return d.toISOString().slice(0, 10);
+          });
+          const fmtDay = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3);
+          const fmtDateShort = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+          return (
+            <div>
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Nutrition</h2>
+                {nutritionView === "today" && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setShowManualMeal(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Manual</button>
+                    <button onClick={() => setShowScanner(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 Scan</button>
                   </div>
-                </div>
-              ))}
-              <div style={{ marginTop: 12, background: COLORS.bg, borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, marginBottom: 4 }}>WEEKLY FLEXIBLE BUDGET</div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, color: COLORS.mutedLight }}>Normal days × {7 - profile.cheatDays}</span>
-                  <span style={{ fontSize: 12, color: COLORS.text, fontWeight: 700 }}>{(calorieGoal * (7 - profile.cheatDays)).toLocaleString()} kcal</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                  <span style={{ fontSize: 12, color: COLORS.mutedLight }}>Cheat days × {profile.cheatDays} 🍕</span>
-                  <span style={{ fontSize: 12, color: COLORS.orange, fontWeight: 700 }}>{(cheatDayCalories * profile.cheatDays).toLocaleString()} kcal</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${COLORS.border}` }}>
-                  <span style={{ fontSize: 12, color: COLORS.text, fontWeight: 700 }}>Weekly Total</span>
-                  <span style={{ fontSize: 14, color: COLORS.accent, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>{weeklyCalBudget.toLocaleString()} kcal</span>
-                </div>
+                )}
               </div>
-            </div>
 
-            <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Meals</p>
-            {meals.length === 0 ? (
-              <div style={{ background: COLORS.card, borderRadius: 14, padding: 24, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>No meals logged</div>
-                <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>Tap 📸 Scan Meal to analyse a photo, or log manually</div>
+              {/* Sub-tabs */}
+              <div style={{ display: "flex", background: COLORS.card, borderRadius: 12, padding: 4, marginBottom: 16, border: `1px solid ${COLORS.border}`, ...hl("nutrition-subtabs") }}>
+                {[["today","Today"],["history","History"],["trends","Trends"]].map(([v, label]) => (
+                  <button key={v} onClick={() => setNutritionView(v)}
+                    style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: "none", background: nutritionView === v ? COLORS.accent : "transparent", color: nutritionView === v ? "#000" : COLORS.muted, fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all 0.2s" }}>
+                    {label}
+                  </button>
+                ))}
               </div>
-            ) : meals.map(m => (
-              <div key={m.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 28 }}>{m.img}</span>
-                    <div><div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{m.name}</div><div style={{ fontSize: 11, color: COLORS.muted }}>{m.time}</div></div>
+
+              {/* ── TODAY ── */}
+              {nutritionView === "today" && (
+                <>
+                  <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                    <CalorieBar consumed={totalCals} goal={calorieGoal} />
+                    <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16 }}>
+                      <MacroRing label="Protein" value={totalProtein} max={macroTargets.protein} color={COLORS.accent} size={72} />
+                      <MacroRing label="Carbs"   value={totalCarbs}   max={macroTargets.carbs}   color={COLORS.blue}   size={72} />
+                      <MacroRing label="Fat"     value={totalFat}     max={macroTargets.fat}      color={COLORS.orange} size={72} />
+                    </div>
                   </div>
-                  <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 16, fontWeight: 700, color: COLORS.yellow }}>{m.calories}<span style={{ fontSize: 11, color: COLORS.muted }}> kcal</span></div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {[{ l: "Protein", v: m.protein, c: COLORS.accent }, { l: "Carbs", v: m.carbs, c: COLORS.blue }, { l: "Fat", v: m.fat, c: COLORS.orange }].map(x => (
-                    <div key={x.l} style={{ flex: 1, background: COLORS.bg, borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: x.c }}>{x.v}g</div>
-                      <div style={{ fontSize: 10, color: COLORS.muted }}>{x.l}</div>
+
+                  <WaterCard waterToday={waterToday} waterGoal={waterGoal} onAdd={addWater} onReset={resetWater} />
+
+                  <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Daily Targets</p>
+                      <span style={{ fontSize: 10, color: COLORS.accent, fontWeight: 700 }}>{profile.goal === "lose" ? "Cut 🔥" : profile.goal === "gain" ? "Bulk 💪" : "Maintain ⚖️"}</span>
+                    </div>
+                    {[
+                      { label: "Calories", value: `${calorieGoal} kcal`, sub: `TDEE ${tdee} kcal`, color: COLORS.yellow },
+                      { label: "Protein",  value: `${macroTargets.protein}g`, sub: `${Math.round(macroTargets.protein * 4)} kcal · 30%`, color: COLORS.accent },
+                      { label: "Carbs",    value: `${macroTargets.carbs}g`,   sub: `${Math.round(macroTargets.carbs * 4)} kcal · 40%`,   color: COLORS.blue },
+                      { label: "Fat",      value: `${macroTargets.fat}g`,     sub: `${Math.round(macroTargets.fat * 9)} kcal · 30%`,     color: COLORS.orange },
+                    ].map(row => (
+                      <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{row.label}</span>
+                        <div style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: row.color, fontFamily: "'Space Mono',monospace" }}>{row.value}</span>
+                          <span style={{ fontSize: 10, color: COLORS.muted, marginLeft: 6 }}>{row.sub}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 12, background: COLORS.bg, borderRadius: 10, padding: 10 }}>
+                      <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, marginBottom: 4 }}>WEEKLY FLEXIBLE BUDGET</div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 12, color: COLORS.mutedLight }}>Normal days × {7 - profile.cheatDays}</span>
+                        <span style={{ fontSize: 12, color: COLORS.text, fontWeight: 700 }}>{(calorieGoal * (7 - profile.cheatDays)).toLocaleString()} kcal</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                        <span style={{ fontSize: 12, color: COLORS.mutedLight }}>Cheat days × {profile.cheatDays} 🍕</span>
+                        <span style={{ fontSize: 12, color: COLORS.orange, fontWeight: 700 }}>{(cheatDayCalories * profile.cheatDays).toLocaleString()} kcal</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: 12, color: COLORS.text, fontWeight: 700 }}>Weekly Total</span>
+                        <span style={{ fontSize: 14, color: COLORS.accent, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>{weeklyCalBudget.toLocaleString()} kcal</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p style={{ margin: "0 0 10px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Meals</p>
+                  {todayMeals.length === 0 ? (
+                    <div style={{ background: COLORS.card, borderRadius: 14, padding: 24, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>No meals logged</div>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>Tap 📸 Scan Meal to analyse a photo, or log manually</div>
+                    </div>
+                  ) : todayMeals.map(m => (
+                    <div key={m.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 28 }}>{m.img}</span>
+                          <div><div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{m.name}</div><div style={{ fontSize: 11, color: COLORS.muted }}>{m.time}</div></div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 16, fontWeight: 700, color: COLORS.yellow }}>{m.calories}<span style={{ fontSize: 11, color: COLORS.muted }}> kcal</span></div>
+                          <button onClick={() => deleteMeal(m.id)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {[{ l: "Protein", v: m.protein, c: COLORS.accent }, { l: "Carbs", v: m.carbs, c: COLORS.blue }, { l: "Fat", v: m.fat, c: COLORS.orange }].map(x => (
+                          <div key={x.l} style={{ flex: 1, background: COLORS.bg, borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: x.c }}>{x.v}g</div>
+                            <div style={{ fontSize: 10, color: COLORS.muted }}>{x.l}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
+                </>
+              )}
+
+              {/* ── HISTORY ── */}
+              {nutritionView === "history" && (
+                <div>
+                  {historyDates.length === 0 ? (
+                    <div style={{ background: COLORS.card, borderRadius: 14, padding: 32, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>No history yet</div>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>Start logging meals to build your history</div>
+                    </div>
+                  ) : historyDates.map(date => {
+                    const dayMeals = mealsByDate[date];
+                    const dayCals = dayMeals.reduce((s, m) => s + m.calories, 0);
+                    const dayWater = waterLog[date] || 0;
+                    const calPct = Math.min(dayCals / calorieGoal, 1);
+                    const waterPct = Math.min(dayWater / waterGoal, 1);
+                    const calColor = calPct >= 0.9 && calPct <= 1.1 ? COLORS.accent : calPct > 1.1 ? COLORS.warn : COLORS.yellow;
+                    return (
+                      <div key={date} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${COLORS.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text }}>{date === todayKey ? "Today" : fmtDateShort(date)}</div>
+                            <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 1 }}>{dayMeals.length} meal{dayMeals.length !== 1 ? "s" : ""}</div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: calColor, fontFamily: "'Space Mono',monospace" }}>{dayCals} kcal</div>
+                            <div style={{ fontSize: 10, color: COLORS.blue }}>{dayWater >= 1000 ? `${(dayWater/1000).toFixed(1)}L` : `${dayWater}ml`} water</div>
+                          </div>
+                        </div>
+                        {/* Calorie bar */}
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ height: 5, background: COLORS.bg, borderRadius: 99, overflow: "hidden", marginBottom: 3 }}>
+                            <div style={{ height: "100%", width: `${calPct * 100}%`, background: `linear-gradient(90deg,${calColor},${calColor}aa)`, borderRadius: 99, transition: "width 0.5s" }} />
+                          </div>
+                          <div style={{ height: 5, background: COLORS.bg, borderRadius: 99, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${waterPct * 100}%`, background: "linear-gradient(90deg,#4d9fff,#00c3ff)", borderRadius: 99, transition: "width 0.5s" }} />
+                          </div>
+                        </div>
+                        {/* Meal list */}
+                        <div style={{ marginTop: 10, borderTop: `1px solid ${COLORS.border}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                          {dayMeals.map(m => (
+                            <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 18 }}>{m.img}</span>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{m.name}</div>
+                                  <div style={{ fontSize: 10, color: COLORS.muted }}>{m.protein}g P · {m.carbs}g C · {m.fat}g F</div>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.yellow, fontFamily: "'Space Mono',monospace" }}>{m.calories}</span>
+                                <button onClick={() => deleteMeal(m.id)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+
+              {/* ── TRENDS ── */}
+              {nutritionView === "trends" && (() => {
+                const barH = 100;
+                const calData = last7.map(d => ({ d, cals: (mealsByDate[d] || []).reduce((s, m) => s + m.calories, 0), water: waterLog[d] || 0 }));
+                const maxCals = Math.max(...calData.map(x => x.cals), calorieGoal);
+                const maxWater = Math.max(...calData.map(x => x.water), waterGoal);
+                const avgCals = Math.round(calData.reduce((s, x) => s + x.cals, 0) / 7);
+                const avgWater = Math.round(calData.reduce((s, x) => s + x.water, 0) / 7);
+                const daysOnCalTarget = calData.filter(x => x.cals >= calorieGoal * 0.85 && x.cals <= calorieGoal * 1.15).length;
+                const daysOnWaterTarget = calData.filter(x => x.water >= waterGoal * 0.9).length;
+
+                return (
+                  <div>
+                    {/* Summary stats */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                      {[
+                        { label: "Avg Calories", value: `${avgCals}`, unit: "kcal/day", color: COLORS.yellow, icon: "🔥" },
+                        { label: "Avg Water", value: avgWater >= 1000 ? `${(avgWater/1000).toFixed(1)}L` : `${avgWater}ml`, unit: "per day", color: COLORS.blue, icon: "💧" },
+                        { label: "Calorie Goals Hit", value: `${daysOnCalTarget}/7`, unit: "days on target", color: COLORS.accent, icon: "◎" },
+                        { label: "Hydration Goals Hit", value: `${daysOnWaterTarget}/7`, unit: "days on target", color: COLORS.purple, icon: "✓" },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
+                          <div style={{ fontSize: 18, marginBottom: 4 }}>{s.icon}</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: s.color, fontFamily: "'Space Mono',monospace" }}>{s.value}</div>
+                          <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{s.unit}</div>
+                          <div style={{ fontSize: 11, color: COLORS.mutedLight, fontWeight: 600, marginTop: 4 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calorie chart */}
+                    <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                        <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Calories — Last 7 Days</p>
+                        <span style={{ fontSize: 10, color: COLORS.yellow, fontWeight: 700 }}>Goal: {calorieGoal} kcal</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: barH + 24 }}>
+                        {calData.map(({ d, cals }) => {
+                          const h = maxCals > 0 ? Math.max(4, (cals / maxCals) * barH) : 4;
+                          const goalH = (calorieGoal / maxCals) * barH;
+                          const color = cals === 0 ? COLORS.border : (cals >= calorieGoal * 0.85 && cals <= calorieGoal * 1.15) ? COLORS.accent : cals > calorieGoal * 1.15 ? COLORS.warn : COLORS.yellow;
+                          return (
+                            <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
+                              <div style={{ fontSize: 9, color: COLORS.muted, height: 14, display: "flex", alignItems: "center" }}>{cals > 0 ? `${Math.round(cals/100)*100}` : ""}</div>
+                              <div style={{ width: "100%", position: "relative", height: barH }}>
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: `${h}px`, background: `${color}cc`, borderRadius: "4px 4px 0 0", transition: "height 0.4s ease" }} />
+                                <div style={{ position: "absolute", bottom: goalH, left: 0, right: 0, height: 1, background: `${COLORS.yellow}66`, borderTop: `1px dashed ${COLORS.yellow}66` }} />
+                              </div>
+                              <div style={{ fontSize: 9, color: d === todayKey ? COLORS.accent : COLORS.muted, fontWeight: d === todayKey ? 700 : 400 }}>{fmtDay(d)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Water chart */}
+                    <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                        <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>💧 Water — Last 7 Days</p>
+                        <span style={{ fontSize: 10, color: COLORS.blue, fontWeight: 700 }}>Goal: {waterGoal >= 1000 ? `${waterGoal/1000}L` : `${waterGoal}ml`}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: barH + 24 }}>
+                        {calData.map(({ d, water }) => {
+                          const h = maxWater > 0 ? Math.max(4, (water / maxWater) * barH) : 4;
+                          const goalH = (waterGoal / maxWater) * barH;
+                          const color = water === 0 ? COLORS.border : water >= waterGoal * 0.9 ? COLORS.blue : COLORS.mutedLight;
+                          return (
+                            <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
+                              <div style={{ fontSize: 9, color: COLORS.muted, height: 14, display: "flex", alignItems: "center" }}>{water > 0 ? (water >= 1000 ? `${(water/1000).toFixed(1)}L` : `${water}`) : ""}</div>
+                              <div style={{ width: "100%", position: "relative", height: barH }}>
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: `${h}px`, background: `${color}cc`, borderRadius: "4px 4px 0 0", transition: "height 0.4s ease" }} />
+                                <div style={{ position: "absolute", bottom: goalH, left: 0, right: 0, height: 1, background: `${COLORS.blue}66`, borderTop: `1px dashed ${COLORS.blue}66` }} />
+                              </div>
+                              <div style={{ fontSize: 9, color: d === todayKey ? COLORS.accent : COLORS.muted, fontWeight: d === todayKey ? 700 : 400 }}>{fmtDay(d)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Macro breakdown — last 7 days avg */}
+                    {meals.length > 0 && (() => {
+                      const recent = meals.filter(m => last7.includes(m.logged_date));
+                      if (!recent.length) return null;
+                      const avgP = Math.round(recent.reduce((s, m) => s + m.protein, 0) / 7);
+                      const avgC = Math.round(recent.reduce((s, m) => s + m.carbs, 0) / 7);
+                      const avgF = Math.round(recent.reduce((s, m) => s + m.fat, 0) / 7);
+                      const totalMacroG = avgP + avgC + avgF || 1;
+                      return (
+                        <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, border: `1px solid ${COLORS.border}` }}>
+                          <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Avg Macro Split — 7-Day</p>
+                          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                            {[{ l: "Protein", v: avgP, c: COLORS.accent, t: macroTargets.protein }, { l: "Carbs", v: avgC, c: COLORS.blue, t: macroTargets.carbs }, { l: "Fat", v: avgF, c: COLORS.orange, t: macroTargets.fat }].map(x => (
+                              <div key={x.l} style={{ flex: 1, background: COLORS.bg, borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: x.c, fontFamily: "'Space Mono',monospace" }}>{x.v}g</div>
+                                <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2 }}>{x.l}</div>
+                                <div style={{ fontSize: 9, color: x.v >= x.t * 0.9 ? COLORS.accent : COLORS.muted, marginTop: 2 }}>{Math.round((x.v / x.t) * 100)}% of goal</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ height: 8, borderRadius: 99, overflow: "hidden", display: "flex" }}>
+                            <div style={{ flex: avgP, background: COLORS.accent, transition: "flex 0.5s" }} />
+                            <div style={{ flex: avgC, background: COLORS.blue, transition: "flex 0.5s" }} />
+                            <div style={{ flex: avgF, background: COLORS.orange, transition: "flex 0.5s" }} />
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                            <span style={{ fontSize: 9, color: COLORS.accent }}>{Math.round((avgP * 4 / (avgP * 4 + avgC * 4 + avgF * 9 || 1)) * 100)}% P</span>
+                            <span style={{ fontSize: 9, color: COLORS.blue }}>{Math.round((avgC * 4 / (avgP * 4 + avgC * 4 + avgF * 9 || 1)) * 100)}% C</span>
+                            <span style={{ fontSize: 9, color: COLORS.orange }}>{Math.round((avgF * 9 / (avgP * 4 + avgC * 4 + avgF * 9 || 1)) * 100)}% F</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })()}
 
         {/* ── WORKOUT ── */}
         {tab === "workout" && (
@@ -2344,7 +2813,7 @@ export default function App() {
               );
             })()}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16, ...hl("workout-history") }}>
               {[{ label: "Sessions", value: workouts.length, unit: "logged" }, { label: "Total Time", value: workouts.reduce((s, w) => s + w.duration, 0), unit: "min" }, { label: "Cals Burned", value: workouts.reduce((s, w) => s + w.calories, 0), unit: "kcal" }].map(s => (
                 <div key={s.label} style={{ background: COLORS.card, borderRadius: 12, padding: 12, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.blue, fontFamily: "'Space Mono',monospace" }}>{s.value}</div>
@@ -2359,47 +2828,62 @@ export default function App() {
                 <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>No sessions logged yet</div>
                 <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 6 }}>Tap ▶ Start to begin your first tracked session</div>
               </div>
-            ) : workouts.map(w => (
-              <div key={w.id} style={{ background: COLORS.card, borderRadius: 14, padding: 16, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 18 }}>{w.type === "Cardio" ? "🏃" : w.type === "Mobility" ? "🧘" : "💪"}</span>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>{w.name}</span>
-                    </div>
-                    <Badge text={w.type} color={workoutTypeColor[w.type] || COLORS.mutedLight} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                    <span style={{ fontSize: 11, color: COLORS.muted }}>{w.date}</span>
-                    <button onClick={() => { if (window.confirm("Delete this session?")) setWorkouts(prev => prev.filter(x => x.id !== w.id)); }} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: 0 }}>✕ delete</button>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginBottom: w.exercises?.length ? 10 : 0 }}>
-                  {[{ v: `${w.duration}m`, l: "Duration", c: COLORS.text }, { v: w.calories, l: "kcal", c: COLORS.yellow }, ...(w.distance ? [{ v: w.distance, l: "Distance", c: COLORS.blue }] : []), ...(w.sets ? [{ v: w.sets, l: "Sets", c: COLORS.accent }] : [])].map((x, i) => (
-                    <div key={i} style={{ flex: 1, background: COLORS.bg, borderRadius: 8, padding: 8, textAlign: "center" }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: x.c }}>{x.v}</div>
-                      <div style={{ fontSize: 10, color: COLORS.muted }}>{x.l}</div>
-                    </div>
-                  ))}
-                </div>
-                {w.exercises?.length > 0 && (
-                  <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
-                    {w.exercises.map((ex, i) => (
-                      <div key={i} style={{ marginBottom: 8 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.accent, marginBottom: 4 }}>{ex.name}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                          {ex.sets.map((s, j) => (
-                            <div key={j} style={{ background: COLORS.bg, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>
-                              <span style={{ color: COLORS.muted }}>S{j + 1} </span>{s.reps}<span style={{ color: COLORS.muted }}>×</span><span style={{ color: COLORS.yellow }}>{s.weight}kg</span>
-                            </div>
-                          ))}
-                        </div>
+            ) : workouts.map(w => {
+              const isExpanded = expandedWorkouts.has(w.id);
+              const toggle = () => setExpandedWorkouts(prev => {
+                const next = new Set(prev);
+                next.has(w.id) ? next.delete(w.id) : next.add(w.id);
+                return next;
+              });
+              const hasExercises = w.exercises?.length > 0;
+              return (
+                <div key={w.id} style={{ background: COLORS.card, borderRadius: 14, marginBottom: 10, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+                  {/* Summary row — always visible, tappable */}
+                  <div onClick={toggle} style={{ padding: 16, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontSize: 18 }}>{w.type === "Cardio" ? "🏃" : w.type === "Mobility" ? "🧘" : "💪"}</span>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>{w.name}</span>
                       </div>
-                    ))}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Badge text={w.type} color={workoutTypeColor[w.type] || COLORS.mutedLight} />
+                        <span style={{ fontSize: 11, color: COLORS.muted }}>{w.duration}m · {w.calories} kcal{w.sets ? ` · ${w.sets} sets` : ""}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 10 }}>
+                      <span style={{ fontSize: 11, color: COLORS.muted }}>{w.date}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {hasExercises && (
+                          <span style={{ fontSize: 10, color: COLORS.accent, fontWeight: 700 }}>
+                            {isExpanded ? "Hide ▲" : `${w.exercises.length} ex ▼`}
+                          </span>
+                        )}
+                        <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete this session?")) setWorkouts(prev => prev.filter(x => x.id !== w.id)); }}
+                          style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: 0 }}>✕</button>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* Expanded exercise detail */}
+                  {isExpanded && hasExercises && (
+                    <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "12px 16px 14px" }}>
+                      {w.exercises.map((ex, i) => (
+                        <div key={i} style={{ marginBottom: i < w.exercises.length - 1 ? 12 : 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.accent, marginBottom: 6 }}>{ex.name}</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {ex.sets.map((s, j) => (
+                              <div key={j} style={{ background: COLORS.bg, borderRadius: 6, padding: "4px 10px", fontSize: 10, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>
+                                <span style={{ color: COLORS.muted }}>S{j + 1} </span>{s.reps}<span style={{ color: COLORS.muted }}>×</span><span style={{ color: COLORS.yellow }}>{s.weight}kg</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -2407,12 +2891,47 @@ export default function App() {
         {tab === "coach" && <AICoach />}
 
         {/* ── SUPPLEMENTS ── */}
-        {tab === "supplements" && (
+        {tab === "supplements" && (() => {
+          const suppLast7Keys = Array.from({ length: 7 }, (_, i) => {
+            const dd = new Date(); dd.setDate(dd.getDate() - 6 + i);
+            return dd.toISOString().slice(0, 10);
+          });
+          const takenTodayCount = supplements.filter(s => (s.history?.[todayKey] === true ? 1 : (s.history?.[todayKey] || 0)) > 0).length;
+          const totalCount = supplements.length;
+          const todayPct = totalCount > 0 ? takenTodayCount / totalCount : 0;
+          return (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Supplements</h2>
               <button onClick={() => setShowAddSupp(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Add</button>
             </div>
+
+            {/* Daily summary card — only shown when supplements exist */}
+            {totalCount > 0 && (
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Today&apos;s Stack</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: todayPct === 1 ? COLORS.accent : COLORS.yellow, fontFamily: "'Space Mono',monospace" }}>
+                    {takenTodayCount}/{totalCount}
+                  </span>
+                </div>
+                <div style={{ height: 6, background: COLORS.bg, borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
+                  <div style={{ height: "100%", width: `${todayPct * 100}%`, background: todayPct === 1 ? COLORS.accent : `linear-gradient(90deg,${COLORS.yellow},${COLORS.accent})`, borderRadius: 99, transition: "width 0.4s ease" }} />
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {supplements.map(s => {
+                    const taken = !!(s.history?.[todayKey]);
+                    return (
+                      <div key={s.id} style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: taken ? s.color + "22" : COLORS.bg, color: taken ? s.color : COLORS.muted, border: `1px solid ${taken ? s.color + "55" : COLORS.border}` }}>
+                        {taken ? "✓ " : ""}{s.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ ...hl("supplements-list") }}>
             {supplements.length === 0 ? (
               <div style={{ background: COLORS.card, borderRadius: 14, padding: 32, textAlign: "center", border: `1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize: 36, marginBottom: 10 }}>❋</div>
@@ -2422,26 +2941,38 @@ export default function App() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {supplements.map(s => {
-                  const takenToday = !!(s.history?.[todayKey]);
-                  // Streak: count consecutive days taken going backwards
+                  // Doses: 0 = not taken, 1 = standard, 2+ = extra. Backwards-compat with old boolean values.
+                  const getDoses = (val) => val === true ? 1 : (typeof val === "number" ? val : 0);
+                  const dosesToday = getDoses(s.history?.[todayKey]);
+                  const takenToday = dosesToday > 0;
+
+                  const setDose = (dk, count) => setSupplements(prev => prev.map(sp =>
+                    sp.id === s.id ? { ...sp, history: { ...sp.history, [dk]: Math.max(0, count) } } : sp
+                  ));
+                  const toggleDay = (dk) => {
+                    const cur = getDoses(s.history?.[dk]);
+                    setDose(dk, cur > 0 ? 0 : 1);
+                  };
+
+                  // Streak
                   let streak = 0;
                   const d = new Date();
                   for (let i = 0; i < 365; i++) {
                     const k = d.toISOString().slice(0, 10);
-                    if (!s.history?.[k]) break;
+                    if (!getDoses(s.history?.[k])) break;
                     streak++;
                     d.setDate(d.getDate() - 1);
                   }
-                  // Last 7 days strip
+                  // Rolling 7-day window
                   const last7 = Array.from({ length: 7 }, (_, i) => {
-                    const dd = new Date();
-                    dd.setDate(dd.getDate() - 6 + i);
-                    return dd.toISOString().slice(0, 10);
+                    const dd = new Date(); dd.setDate(dd.getDate() - 6 + i);
+                    return { key: dd.toISOString().slice(0, 10), label: dd.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 1) };
                   });
+
                   return (
                     <div key={s.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
                           <span style={{ fontSize: 26 }}>{s.emoji}</span>
                           <div>
                             <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.text }}>{s.name}</div>
@@ -2449,41 +2980,70 @@ export default function App() {
                             {s.benefit && <div style={{ fontSize: 11, color: s.color, marginTop: 2 }}>{s.benefit}</div>}
                           </div>
                         </div>
-                        {/* Ring toggle */}
-                        <button onClick={() => setSupplements(prev => prev.map(sp => sp.id === s.id ? { ...sp, history: { ...sp.history, [todayKey]: !takenToday } } : sp))}
-                          style={{ width: 48, height: 48, borderRadius: "50%", border: `3px solid ${takenToday ? s.color : COLORS.border}`, background: takenToday ? s.color + "22" : "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
-                          <span style={{ fontSize: takenToday ? 16 : 11, color: takenToday ? s.color : COLORS.muted, fontWeight: 800, lineHeight: 1 }}>{takenToday ? "✓" : "TAKE"}</span>
-                        </button>
+
+                        {/* Dose counter for today */}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                          <button onClick={() => setDose(todayKey, takenToday ? 0 : 1)}
+                            style={{ width: 48, height: 48, borderRadius: "50%", border: `3px solid ${takenToday ? s.color : COLORS.border}`, background: takenToday ? s.color + "22" : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                            <span style={{ fontSize: takenToday ? (dosesToday > 1 ? 13 : 16) : 11, color: takenToday ? s.color : COLORS.muted, fontWeight: 800 }}>
+                              {dosesToday === 0 ? "TAKE" : dosesToday === 1 ? "✓" : `×${dosesToday}`}
+                            </span>
+                          </button>
+                          {takenToday && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <button onClick={() => setDose(todayKey, dosesToday - 1)}
+                                style={{ width: 20, height: 20, borderRadius: 5, border: `1px solid ${COLORS.border}`, background: COLORS.bg, color: COLORS.muted, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                              <span style={{ fontSize: 10, color: COLORS.mutedLight, minWidth: 22, textAlign: "center", fontWeight: 700 }}>{dosesToday}×</span>
+                              <button onClick={() => setDose(todayKey, dosesToday + 1)}
+                                style={{ width: 20, height: 20, borderRadius: 5, border: `1px solid ${s.color}`, background: s.color + "22", color: s.color, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {/* 7-day strip + streak */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+
+                      {/* Rolling 7-day strip */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                         <div style={{ display: "flex", gap: 4 }}>
-                          {last7.map((dk, i) => {
-                            const taken = !!(s.history?.[dk]);
+                          {last7.map(({ key: dk, label }) => {
+                            const doses = getDoses(s.history?.[dk]);
+                            const taken = doses > 0;
                             const isToday = dk === todayKey;
                             return (
-                              <div key={i} title={dk}
-                                style={{ width: 22, height: 22, borderRadius: 5, background: taken ? s.color : COLORS.bg, border: `1px solid ${isToday ? s.color : COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                {isToday && !taken && <div style={{ width: 5, height: 5, borderRadius: "50%", background: COLORS.border }} />}
-                              </div>
+                              <button key={dk} onClick={() => toggleDay(dk)}
+                                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                                <div style={{ fontSize: 8, color: isToday ? s.color : COLORS.muted, fontWeight: isToday ? 800 : 500 }}>{label}</div>
+                                <div style={{ width: 26, height: 26, borderRadius: 7, background: taken ? s.color : COLORS.bg, border: `2px solid ${isToday ? s.color : taken ? s.color + "88" : COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                                  <span style={{ fontSize: doses > 1 ? 9 : 11, color: "#000", fontWeight: 900 }}>
+                                    {taken ? (doses > 1 ? `×${doses}` : "✓") : ""}
+                                  </span>
+                                </div>
+                              </button>
                             );
                           })}
                         </div>
                         {streak > 0 && (
                           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                             <span style={{ fontSize: 13 }}>🔥</span>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: s.color }}>{streak}d</span>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: s.color }}>{streak}d streak</span>
                           </div>
                         )}
                       </div>
-                      <Badge text={s.category} color={s.color} />
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Badge text={s.category} color={s.color} />
+                        <span style={{ fontSize: 10, color: COLORS.mutedLight, fontWeight: 600 }}>
+                          {suppLast7Keys.filter(k => getDoses(s.history?.[k]) > 0).length}/7 days this week
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
+            </div>{/* end supplements-list highlight wrapper */}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── HEALTH ── */}
         {tab === "health" && (
@@ -2492,7 +3052,8 @@ export default function App() {
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Health & Recovery</h2>
               <button onClick={() => setShowInjury(true)} style={{ padding: "8px 14px", background: COLORS.warn, color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Log Symptom</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            {/* Sleep + Recovery row */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               {/* Sleep card */}
               <div onClick={() => setShowSleep(true)}
                 style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}`, cursor: "pointer" }}>
@@ -2518,25 +3079,36 @@ export default function App() {
                 )}
               </div>
 
-              {/* Recovery card */}
-              <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>Recovery</div>
-                {recoveryData.pct !== null ? (
-                  <>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: recoveryData.color, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>
-                      {recoveryData.pct}<span style={{ fontSize: 14, color: COLORS.muted }}>%</span>
-                    </div>
-                    <div style={{ height: 4, background: COLORS.border, borderRadius: 99, marginTop: 8, marginBottom: 6, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${recoveryData.pct}%`, background: recoveryData.color, borderRadius: 99, transition: "width 1s ease" }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: recoveryData.color }}>{recoveryData.label}</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.muted, fontFamily: "'Space Mono',monospace", lineHeight: 1 }}>—</div>
-                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 6, lineHeight: 1.4 }}>{recoveryData.label}</div>
-                  </>
-                )}
+              {/* Recovery status mini card */}
+              <div style={{ background: `${recoveryData.color()}18`, borderRadius: 14, padding: 14, border: `1px solid ${recoveryData.color()}44`, ...hl("recovery-card") }}>
+                <div style={{ fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Recovery</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: recoveryData.color(), fontFamily: "'Space Mono',monospace", lineHeight: 1, marginBottom: 8 }}>
+                  {recoveryData.label}
+                </div>
+                {/* 5-dot scale */}
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[0,1,2,3,4].map(i => (
+                    <div key={i} style={{ flex: 1, height: 4, borderRadius: 99, background: i <= recoveryData.score ? recoveryData.color() : COLORS.border, transition: "background 0.3s" }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Recovery detail card — full width */}
+            <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>What&apos;s driving this</div>
+                <span style={{ fontSize: 11, color: recoveryData.color(), fontWeight: 700 }}>{recoveryData.label}</span>
+              </div>
+              <div style={{ fontSize: 13, color: COLORS.text, fontWeight: 600, marginBottom: 10, lineHeight: 1.4 }}>
+                {recoveryData.rec}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {recoveryData.factors.map((f, i) => (
+                  <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: f.bad ? `${COLORS.warn}18` : COLORS.bg, color: f.bad ? COLORS.warn : COLORS.mutedLight, border: `1px solid ${f.bad ? COLORS.warn + "44" : COLORS.border}` }}>
+                    {f.text}
+                  </span>
+                ))}
               </div>
             </div>
             {/* Active injuries */}
@@ -2619,24 +3191,40 @@ export default function App() {
             onToggleTheme={() => setIsDark(d => !d)}
             onShowTutorial={() => setShowOnboarding(true)}
             onSignOut={supabase ? async () => { await signOut(); setAuthSession(null); } : null}
+            tourHL={tourHL}
           />
         )}
 
       </div>
 
       {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", padding: `10px 0 max(16px, env(safe-area-inset-bottom, 16px))`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
-        {NAV.map(n => (
-          <button key={n.id} onClick={() => setTab(n.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
-            <span style={{ fontSize: 17, filter: tab === n.id ? "none" : "grayscale(1) opacity(0.4)", transition: "all 0.2s" }}>{n.icon}</span>
-            <span style={{ fontSize: 9, fontWeight: tab === n.id ? 700 : 500, color: tab === n.id ? COLORS.accent : COLORS.muted, transition: "color 0.2s" }}>{n.label}</span>
-            {tab === n.id && <div style={{ width: 4, height: 4, borderRadius: "50%", background: COLORS.accent }} />}
-          </button>
-        ))}
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, zIndex: 400, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, padding: `8px 4px calc(8px + env(safe-area-inset-bottom, 0px))`, display: "flex", justifyContent: "space-around", alignItems: "flex-end", ...hl("bottom-nav") }}>
+        {BOTTOM_NAV.map(n => {
+          const isActive = n.group ? n.group.includes(tab) : tab === n.id;
+          return (
+            <button key={n.id} onClick={() => {
+              if (n.id === "track") navigateTo(lastTrackTab);
+              else if (n.id === "wellbeing") navigateTo(lastWellbeingTab);
+              else navigateTo(n.id);
+            }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "4px 0", background: "none", border: "none", cursor: "pointer" }}>
+              <span style={{ fontSize: 21, lineHeight: 1, color: isActive ? COLORS.accent : COLORS.muted, transition: "color 0.2s" }}>{n.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? COLORS.accent : COLORS.muted, letterSpacing: "0.01em", transition: "color 0.2s" }}>{n.label}</span>
+              {isActive && <div style={{ width: 4, height: 4, borderRadius: "50%", background: COLORS.accent, marginTop: 1 }} />}
+            </button>
+          );
+        })}
       </div>
 
-      {showScanner && <AIPhotoScanner onClose={() => setShowScanner(false)} onScan={m => setMeals(prev => [...prev, { id: Date.now(), name: m.name, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, img: "🍽️" }])} />}
-      {showManualMeal && <ManualMealModal onClose={() => setShowManualMeal(false)} onAdd={m => setMeals(prev => [...prev, m])} />}
+      {showScanner && <AIPhotoScanner onClose={() => setShowScanner(false)} onScan={m => {
+        const meal = { id: Date.now(), name: m.name, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, img: "🍽️", logged_date: todayKey };
+        setMeals(prev => [...prev, meal]);
+        if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
+      }} />}
+      {showManualMeal && <ManualMealModal onClose={() => setShowManualMeal(false)} onAdd={m => {
+        const meal = { ...m, logged_date: todayKey };
+        setMeals(prev => [...prev, meal]);
+        if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
+      }} />}
       {showActiveWorkout && activeSession && <ActiveWorkoutSession session={activeSession} setSession={setActiveSession} sessionElapsed={sessionElapsed} restLeft={restLeft} resting={resting} onFinish={handleFinishSession} onClose={() => setShowActiveWorkout(false)} />}
       {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
       {showInjury && <AddInjuryModal onClose={() => setShowInjury(false)} onAdd={inj => setInjuries(prev => [inj, ...prev])} />}
@@ -2645,6 +3233,38 @@ export default function App() {
       {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }} />}
       {showSessionStart && todayRoutine && <SessionStartPrompt todayRoutine={todayRoutine} onClose={() => setShowSessionStart(false)} onUseRoutine={() => { setShowSessionStart(false); startActiveSession(todayRoutine.exercises, todayRoutine.name, todayRoutine.type); }} onFresh={() => { setShowSessionStart(false); startActiveSession(); }} />}
       {showOnboarding && <OnboardingModal onComplete={() => { localStorage.setItem("nf_onboarded", "1"); setShowOnboarding(false); }} />}
+
+      {/* Guided renovation tour card — floats above bottom nav, walks user through the app */}
+      {tourStep !== null && (() => {
+        const step = TOUR_STEPS[tourStep];
+        const isLast = tourStep === TOUR_STEPS.length - 1;
+        return (
+          <div style={{ position: "fixed", bottom: `calc(74px + env(safe-area-inset-bottom, 0px))`, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 32px)", maxWidth: 448, zIndex: 600, background: COLORS.surface, border: `1px solid ${COLORS.accent}55`, borderRadius: 20, padding: "14px 16px 16px", boxShadow: `0 -4px 32px ${COLORS.accent}1a` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS.accent }} />
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: COLORS.accent }}>Coach · {tourStep + 1} / {TOUR_STEPS.length}</span>
+              </div>
+              <button onClick={dismissTour} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Skip tour</button>
+            </div>
+            <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+              {TOUR_STEPS.map((_, i) => (
+                <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i <= tourStep ? COLORS.accent : COLORS.border, transition: "background 0.3s" }} />
+              ))}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.text, marginBottom: 5, lineHeight: 1.3 }}>{step.title}</div>
+            <div style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.6, marginBottom: 14 }}>{step.body}</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              {tourStep > 0 && (
+                <button onClick={backTour} style={{ padding: "9px 16px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>← Back</button>
+              )}
+              <button onClick={advanceTour} style={{ padding: "9px 22px", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+                {isLast ? "Done →" : "Next →"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {showSleep && (
         <LogSleepModal
           existing={sleepLog[todayKey] || sleepLog[yesterdayKey] || null}

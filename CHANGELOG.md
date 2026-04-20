@@ -1,6 +1,67 @@
 NourishFit Changelog
 
-v0.9.1 — Auth, UX Polish & Deployment (current)
+v0.9.5 — Hybrid Navigation, Guided Tour & UX Polish (current)
+
+Navigation
+  Bottom nav bar: Home · Track · Coach · Progress · Wellbeing (replaces 8-tab bottom row)
+  Track group: Nutrition + Workout — tapping always opens last-used sub-tab
+  Wellbeing group: Health + Supplements — same last-used memory, persisted to localStorage
+  Header pill: visible only inside group tabs, opens a dropdown to switch between sub-options
+  Pill dropdown: animated chevron, current tab ticked, closes on outside tap
+  Full nav sheet removed — bottom nav covers all destinations
+
+Coach — Guided Renovation Tour
+  Interactive 8-step induction for existing users on next open after update
+  Coach navigates the app for users — each step switches to the relevant tab automatically
+  Pulsing accent glow highlights the specific UI element being explained each step
+  Steps cover: bottom nav, pill switcher, Nutrition History/Trends, Workout cards, Recovery, Supplements, Profile Help
+  Progress bar, Back button, and Skip tour option throughout
+  Stored as nf_renovated_v093 — never shown again once completed or skipped
+  New users see original onboarding only; renovation tour never shown to first-time users
+
+Recovery
+  Qualitative model replaces arbitrary percentage: Rest · Low · Moderate · Good · Optimal
+  Multi-factor score: time since last workout (base) + sleep hours/quality + training load
+  Matches smartwatch-style readiness language
+
+Supplements
+  Rolling 7-day history strip (day-of-week labels, Mon–Sun relative to today)
+  Dose counting: tap once to log, tap again to add (protein shake twice = 2 doses)
+  Backward-compatible with existing boolean history entries
+
+Workout Sessions
+  History cards now collapse — tap any session to expand exercise detail
+  Delete individual sets mid-session (✕ on uncompleted sets only)
+
+iOS / Viewport
+  Prevented accidental zoom on tab switch (user-scalable=no, overflow-x hidden)
+  Bottom content no longer clipped on iPhone
+
+v0.9.3 — Meals & Water Sync + History & Trends
+
+Meals & Water — Supabase Sync
+  Meals are now synced to Supabase on add and delete; loaded from cloud on sign-in
+  Water log is synced to Supabase on add and reset; loaded from cloud on sign-in
+  Existing localStorage meals backfilled with today's date on first run
+  Meal delete button added to both Today and History views
+
+Nutrition — History Tab
+  New "History" sub-tab groups all past meals by date
+  Each day shows: calorie total, water intake, calorie + water progress bars
+  Full meal list per day with macros and delete option
+
+Nutrition — Trends Tab
+  New "Trends" sub-tab with 7-day analytics
+  Summary stats: avg daily calories, avg water, days on calorie target, days on hydration target
+  Bar chart: calories per day vs goal (colour-coded: green = on target, yellow = under, red = over)
+  Bar chart: water intake per day vs goal
+  Macro breakdown card: 7-day average protein/carbs/fat vs targets + stacked % bar
+
+Today Tab
+  Today's meals now correctly filtered to today only (history kept in separate tab)
+  Dashboard "Today's Meals" widget also filtered to today
+
+v0.9.1 — Auth, UX Polish & Deployment
 
 Supabase Auth
   Sign in / Sign up screen shown to unauthenticated users before the app loads
