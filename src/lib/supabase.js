@@ -12,7 +12,11 @@ export const supabase = url && key ? createClient(url, key) : null
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 export async function signUp(email, password) {
-  return supabase.auth.signUp({ email, password })
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.origin },
+  })
 }
 
 export async function signIn(email, password) {
