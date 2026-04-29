@@ -1,6 +1,89 @@
 NourishFit Changelog
 
-v0.9.5 — Hybrid Navigation, Guided Tour & UX Polish (current)
+v1.0.0 — HealthKit, GPS Running, Capacitor & 7 Feature Improvements (current)
+
+Native Health Integration
+  Capacitor setup (capacitor.config.ts, appId: com.nourishfit.app) — enables iOS/Android native builds
+  Apple HealthKit / Health Connect read sync via @capgo/capacitor-health: steps, active calories,
+    heart rate, heart rate average, sleep (noon-to-noon window), distance
+  Apple HealthKit write sync: completed GPS runs written back to Fitness app as workout + distance + calories
+  HealthKit card appears on Dashboard only when running in a native Capacitor build (not PWA)
+  Sync button with last-synced time; sleep auto-imported if no manual entry exists for that day
+
+GPS Run Tracker (Strava-style)
+  Three-screen flow: GPS lock → active run → post-run summary
+  Live Leaflet map (OpenStreetMap, no API key) with green route trail drawn as the run progresses
+  Real-time stats: distance (km or mi based on profile unit), current pace, elapsed time, elevation gain
+  Haversine distance formula; GPS samples every 5 seconds to keep route array small
+  Pause/Resume without ending the run
+  Post-run summary: distance, time, avg pace, calories (MET × weight × distance), elevation, editable run name
+  Save Run logs to workout history and writes back to Apple Health (if available)
+  Share button on post-run summary (native share sheet or clipboard fallback)
+  "🏃 Run" button in Workout tab header
+
+Push Notification Reminders (Item 1)
+  Custom service worker (src/sw.js) using injectManifest strategy — handles push events, tap-to-open,
+    and in-app SCHEDULE_NOTIFICATION messages so notifications appear in system tray when tab is backgrounded
+  src/lib/notifications.js: isSupported, getPermission, requestPermission, scheduleForToday, scheduleAll
+  Profile → Notifications section: per-reminder toggles and time pickers for supplement, water, and meal reminders
+  Permissions flow: unsupported / blocked / prompt / granted states all handled with clear messaging
+  Timers re-scheduled on app open and whenever preferences change; cleaned up on unmount
+
+Body Weight Log + Trend Chart (Item 2)
+  Dashboard weight card below the 4-stat grid
+  Log daily weight via LogWeightModal (large number input, date picker, supports backdating)
+  SVG polyline sparkline with gradient fill — green when trending down, red when trending up
+  Card shows latest weight, delta from previous entry, and total change across visible entries
+  Stored in nf_weight_log (YYYY-MM-DD → number), persisted to localStorage
+
+Food Database Search (Item 3)
+  "🔍 Search" button in Nutrition → Today header (alongside Manual and Scan)
+  Searches Open Food Facts (3M+ products, free, no API key) with 450ms debounce
+  Results show product name, brand, macros per 100g in colour-coded chips
+  Portion screen: gram input pre-filled with product serving size; live macro preview updates as you type
+  Logs meal identically to Manual and Scan entries; syncs to Supabase
+
+Personal Records Tracking (Item 4)
+  Epley 1RM formula (weight × (1 + reps/30)) applied to every completed set on session finish
+  New PR auto-detected and stored; yellow toast banner names the exercise(s) for 4 seconds
+  Personal Records section at the bottom of the Workout tab, sorted by most recently set
+  Each PR card: exercise name, estimated 1RM, best set (weight × reps), date, PRSparkline history chart
+  AddPRModal for manual entry: bodyweight exercises, backdating, live 1RM preview
+  Stored in nf_prs; delete any record with ✕
+
+Weekly Summary Card (Item 5)
+  Collapsible "Week in Review" card on Dashboard (rolling 7-day window)
+  7-day activity strip: green bar = workout logged that day, grey = rest
+  Workout stats: sessions, total active minutes, total kcal burned
+  Nutrition row: avg daily calories vs goal, days logged out of 7
+  Wellness row: avg sleep hours, days water goal met, supplement adherence %
+  Grid auto-adjusts to 2 or 3 columns based on data available
+
+Data Export (CSV) (Item 6)
+  Profile → Export Data section with 5 download buttons
+  Meals CSV: date, time, name, calories, protein, carbs, fat
+  Workouts CSV: date, session, type, duration, est. calories, exercise, sets (one row per exercise)
+  Health Metrics CSV: one row per date with weight, water, sleep hours, sleep quality
+  Supplements CSV: supplement × date grid (last 30 days), 1 = taken / 0 = not
+  Personal Records CSV: exercise, best 1RM, best weight, best reps, date
+  Buttons greyed out with "No data" label when the category is empty
+  All exports client-side — nothing leaves the device
+
+Share a Workout (Item 7)
+  Web Share API on mobile (native share sheet: WhatsApp, Instagram, Messages, etc.)
+  Clipboard fallback on desktop with "✓ Copied to clipboard!" toast
+  Three entry points: workout history card (↗ icon), session-complete summary, run-complete summary
+  Strength format: session name, duration, calories, sets, exercise list with reps×weight
+  Run format: distance, time, avg pace, elevation gain, calories
+
+Bug Fixes & Timezone Fixes
+  Supplements and water tracking date keys now use local time (localDateKey helper) instead of
+    toISOString() which was returning UTC dates and causing 1-day rollback in some timezones
+  Water log random reset fixed: addWater uses functional setState to avoid stale closure;
+    Supabase sync uses Math.max(local, remote) for today to prevent cloud overwrites
+  Profile location field added (city/country text input); synced to Supabase profiles table
+
+v0.9.5 — Hybrid Navigation, Guided Tour & UX Polish
 
 Navigation
   Bottom nav bar: Home · Track · Coach · Progress · Wellbeing (replaces 8-tab bottom row)
