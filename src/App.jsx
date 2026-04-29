@@ -2,6 +2,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import imageCompression from "browser-image-compression";
 import { savePhoto, loadPhoto, deletePhoto } from "./db.js";
 import { supabase, signIn, signUp, signOut, onAuthChange } from "./lib/supabase.js";
+import { isHealthKitAvailable, requestHealthKitAuth, syncToday, saveRunToHealth } from "./lib/healthkit.js";
+import { scheduleAll, requestPermission, getPermission } from "./lib/notifications.js";
+import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+// Fix Leaflet default marker icon asset path issue with Vite bundler
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: new URL("leaflet/dist/images/marker-icon-2x.png", import.meta.url).href,
+  iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).href,
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).href,
+});
 
 const DARK_COLORS = {
   bg: "#0a0a0f",
@@ -397,6 +409,244 @@ function AIPhotoScanner({ onClose, onScan }) {
   );
 }
 
+// ─── CSV Export Utility ───────────────────────────────────────────────────────
+
+function downloadCSV(filename, headers, rows) {
+  const esc = v => {
+    const s = String(v ?? "");
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [headers, ...rows].map(r => r.map(esc).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Workout Share Utilities ──────────────────────────────────────────────────
+
+function buildShareText(w) {
+  const isRun = w.type === "Run" || (w.distance && !w.exercises?.length);
+  const icon = isRun ? "🏃" : w.type === "Mobility" ? "🧘" : "💪";
+  const lines = [`${icon} ${w.name} — NourishFit`];
+
+  if (isRun && w.distance) {
+    lines.push(`📍 ${w.distance} km · ⏱ ${w.duration} min · 💨 ${w.pace ?? ""}/${w.distance > 0 ? "km" : ""}`);
+    if (w.elevationGain > 0) lines.push(`⬆️ ${w.elevationGain} m elevation gain`);
+    lines.push(`🔥 ${w.calories} kcal`);
+  } else {
+    lines.push(`⏱ ${w.duration} min · 🔥 ${w.calories} kcal${w.sets ? ` · ${w.sets} sets` : ""}`);
+    if (w.exercises?.length > 0) {
+      lines.push("");
+      w.exercises.forEach(ex => {
+        const setStr = ex.sets?.map(s => `${s.reps}×${s.weight}kg`).join(", ");
+        lines.push(`• ${ex.name}${setStr ? `: ${setStr}` : ""}`);
+      });
+    }
+  }
+  lines.push("", "Tracked with NourishFit 💚");
+  return lines.join("\n");
+}
+
+async function shareWorkout(text, title) {
+  if (navigator.share) {
+    try { await navigator.share({ title, text }); return "shared"; }
+    catch { return "cancelled"; }
+  }
+  if (navigator.clipboard) {
+    try { await navigator.clipboard.writeText(text); return "copied"; }
+    catch {}
+  }
+  return "error";
+}
+
+// ─── Weekly Summary Card ──────────────────────────────────────────────────────
+
+function WeeklySummaryCard({ meals, workouts, waterLog, waterGoal, sleepLog, supplements, calorieGoal }) {
+  const [open, setOpen] = useState(true);
+
+  const ldk = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    return ldk(d);
+  });
+
+  // Workouts — id is a Date.now() timestamp
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const weekWorkouts = workouts.filter(w => w.id > weekAgo);
+  const weekSessions  = weekWorkouts.length;
+  const weekMinutes   = weekWorkouts.reduce((s, w) => s + (w.duration  || 0), 0);
+  const weekCalBurned = weekWorkouts.reduce((s, w) => s + (w.calories  || 0), 0);
+
+  // Which days had a workout (for the activity strip)
+  const activeDay = last7.map(k => weekWorkouts.some(w => ldk(new Date(w.id)) === k));
+
+  // Nutrition — grouped by logged_date
+  const calsByDay = Object.fromEntries(last7.map(k => [k, 0]));
+  meals.forEach(m => { if (calsByDay[m.logged_date] !== undefined) calsByDay[m.logged_date] += m.calories || 0; });
+  const daysLogged = last7.filter(k => calsByDay[k] > 0).length;
+  const avgCals    = daysLogged > 0 ? Math.round(last7.reduce((s, k) => s + calsByDay[k], 0) / daysLogged) : 0;
+
+  // Water
+  const daysWaterMet = last7.filter(k => (waterLog[k] || 0) >= waterGoal).length;
+
+  // Sleep
+  const sleepEntries = last7.map(k => sleepLog[k]).filter(Boolean);
+  const avgSleep = sleepEntries.length > 0
+    ? (sleepEntries.reduce((s, e) => s + parseFloat(e.hours || 0), 0) / sleepEntries.length).toFixed(1)
+    : null;
+
+  // Supplements
+  const suppAdherence = supplements.length > 0
+    ? Math.round(supplements.reduce((s, supp) => s + last7.filter(k => supp.history?.[k]).length, 0) / (supplements.length * 7) * 100)
+    : null;
+
+  const rangeStart = new Date(last7[0] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const rangeEnd   = new Date(last7[6] + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const statCell = (value, unit, color) => (
+    <div style={{ background: COLORS.bg, borderRadius: 10, padding: "10px 6px", textAlign: "center" }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color, fontFamily: "'Space Mono',monospace", lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 9, color: COLORS.muted, marginTop: 2 }}>{unit}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, marginBottom: 14, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 14 }}>📊</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: COLORS.text }}>Week in Review</span>
+          <span style={{ fontSize: 10, color: COLORS.muted }}>{rangeStart} – {rangeEnd}</span>
+        </div>
+        <span style={{ fontSize: 10, color: COLORS.muted, display: "inline-block", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 14px 14px" }}>
+          {/* 7-day activity strip */}
+          <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
+            {last7.map((k, i) => {
+              const dayLetter = new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" })[0];
+              return (
+                <div key={k} style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ height: 6, borderRadius: 3, background: activeDay[i] ? COLORS.accent : COLORS.border, marginBottom: 3 }} />
+                  <span style={{ fontSize: 9, color: activeDay[i] ? COLORS.accent : COLORS.muted, fontWeight: activeDay[i] ? 700 : 400 }}>{dayLetter}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Workout stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6, marginBottom: 8 }}>
+            {statCell(weekSessions,  "sessions",    COLORS.accent)}
+            {statCell(weekMinutes,   "min active",  COLORS.blue)}
+            {statCell(weekCalBurned, "kcal burned", COLORS.orange)}
+          </div>
+
+          {/* Nutrition row */}
+          {daysLogged > 0 && (
+            <div style={{ background: COLORS.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 2 }}>Avg daily calories</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.yellow, fontFamily: "'Space Mono',monospace" }}>
+                  {avgCals} <span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 400 }}>/ {calorieGoal}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 2 }}>Days logged</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.text }}>{daysLogged}<span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 400 }}>/7</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* Wellness row */}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${suppAdherence !== null ? 3 : 2}, 1fr)`, gap: 6 }}>
+            {statCell(avgSleep !== null ? `${avgSleep}h` : "—", "avg sleep",      COLORS.purple)}
+            {statCell(`${daysWaterMet}/7`,                       "water goal met", COLORS.blue)}
+            {suppAdherence !== null && statCell(`${suppAdherence}%`, "supp adherence", COLORS.accent)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Personal Records ─────────────────────────────────────────────────────────
+
+const epley1RM = (weight, reps) => {
+  const w = parseFloat(weight) || 0, r = parseInt(reps) || 0;
+  if (w <= 0 || r <= 0) return 0;
+  return Math.round(r === 1 ? w : w * (1 + r / 30));
+};
+
+function PRSparkline({ history }) {
+  if (history.length < 2) return null;
+  const W = 200, H = 36, P = 3;
+  const vals = history.map(h => h.oneRM);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const range = hi - lo || 1;
+  const toX = i => P + (i / (history.length - 1)) * (W - P * 2);
+  const toY = v => H - P - ((v - lo) / range) * (H - P * 2);
+  const pts = history.map((h, i) => `${toX(i).toFixed(1)},${toY(h.oneRM).toFixed(1)}`).join(" ");
+  const trend = vals[vals.length - 1] >= vals[0] ? COLORS.accent : COLORS.warn;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block" }} preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={trend} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={toX(history.length - 1)} cy={toY(vals[vals.length - 1])} r="3" fill={trend} />
+    </svg>
+  );
+}
+
+function AddPRModal({ onClose, onSave, todayStr }) {
+  const [form, setForm] = useState({ name: "", weight: "", reps: "1", date: todayStr });
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "9px 12px", color: COLORS.text, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
+  const oneRM = epley1RM(form.weight, form.reps);
+  const valid = form.name.trim() && parseFloat(form.weight) > 0 && parseInt(form.reps) > 0;
+  const handle = () => {
+    if (!valid) return;
+    onSave(form.name.trim(), parseFloat(form.weight), parseInt(form.reps), form.date, oneRM);
+    onClose();
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Personal Record</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
+        </div>
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Exercise Name</label>
+        <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Squat, Bench Press, Pull-ups" style={{ ...inputStyle, marginBottom: 14 }} autoFocus />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Weight (kg)</label>
+            <input type="number" min="0" step="0.5" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))} placeholder="e.g. 100" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Reps</label>
+            <input type="number" min="1" max="50" value={form.reps} onChange={e => setForm(p => ({ ...p, reps: e.target.value }))} style={inputStyle} />
+          </div>
+        </div>
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Date</label>
+        <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} style={{ ...inputStyle, marginBottom: 16 }} />
+        {oneRM > 0 && (
+          <div style={{ background: COLORS.accentDim, borderRadius: 10, padding: "10px 14px", marginBottom: 16, textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: COLORS.muted }}>Estimated 1RM: </span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: COLORS.accent, fontFamily: "'Space Mono',monospace" }}>{oneRM} kg</span>
+          </div>
+        )}
+        <button onClick={handle} disabled={!valid}
+          style={{ width: "100%", padding: "13px 0", background: valid ? COLORS.accent : COLORS.border, color: valid ? "#000" : COLORS.muted, border: "none", borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: valid ? "pointer" : "default" }}>
+          Save Record
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Log Modal (cardio / manual entry) ──────────────────────────────────
 
 function QuickLogModal({ onClose, onAdd }) {
@@ -754,9 +1004,425 @@ function AICoach() {
   );
 }
 
+// ─── Run Tracker ──────────────────────────────────────────────────────────────
+
+function MapAutoCenter({ pos }) {
+  const map = useMap();
+  useEffect(() => { if (pos) map.setView([pos.lat, pos.lng], map.getZoom()); }, [pos, map]);
+  return null;
+}
+
+function RunTracker({ profile, onClose, onSave, hkAvailable }) {
+  const [runCopied, setRunCopied] = useState(false);
+  const [screen, setScreen] = useState("pre");
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [gpsError, setGpsError] = useState(null);
+  const [currentPos, setCurrentPos] = useState(null);
+  const [route, setRoute] = useState([]);
+  const [paused, setPaused] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [elevationGain, setElevationGain] = useState(0);
+  const [runName, setRunName] = useState("Morning Run");
+
+  const watchId = useRef(null);
+  const timerRef = useRef(null);
+  const lastSampleTime = useRef(0);
+  const lastAlt = useRef(null);
+  const runningRef = useRef(false);
+
+  const isMetric = profile.weightUnit !== "lbs";
+
+  const haversine = (a, b) => {
+    const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  };
+
+  const totalDistKm = route.length < 2 ? 0 : route.slice(1).reduce((acc, pt, i) => acc + haversine(route[i], pt), 0);
+  const displayDist = isMetric ? totalDistKm : totalDistKm * 0.621371;
+  const distUnit = isMetric ? "km" : "mi";
+
+  const paceStr = (() => {
+    const d = isMetric ? totalDistKm : totalDistKm * 0.621371;
+    if (d < 0.05 || elapsed < 5) return "--:--";
+    const spu = elapsed / d;
+    return `${Math.floor(spu / 60)}:${String(Math.round(spu % 60)).padStart(2, "0")}`;
+  })();
+
+  const elapsedStr = `${String(Math.floor(elapsed / 3600)).padStart(2, "0")}:${String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  // GPS watch for pre-run accuracy display
+  useEffect(() => {
+    if (!navigator.geolocation) { setGpsError("GPS not available on this device."); return; }
+    watchId.current = navigator.geolocation.watchPosition(
+      pos => {
+        setGpsAccuracy(Math.round(pos.coords.accuracy));
+        setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsError(null);
+      },
+      err => setGpsError(err.message),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+    return () => { if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current); clearInterval(timerRef.current); };
+  }, []);
+
+  // Timer
+  useEffect(() => {
+    if (screen === "active" && !paused) {
+      timerRef.current = setInterval(() => setElapsed(t => t + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [screen, paused]);
+
+  const startRun = () => {
+    runningRef.current = true;
+    lastSampleTime.current = Date.now();
+    if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
+    watchId.current = navigator.geolocation.watchPosition(
+      pos => {
+        const now = Date.now();
+        setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        if (!runningRef.current) return;
+        if (now - lastSampleTime.current >= 5000) {
+          lastSampleTime.current = now;
+          const { latitude: lat, longitude: lng, altitude: alt } = pos.coords;
+          if (alt != null && lastAlt.current != null && alt > lastAlt.current) {
+            setElevationGain(eg => eg + (alt - lastAlt.current));
+          }
+          lastAlt.current = alt;
+          setRoute(prev => [...prev, { lat, lng, alt, t: now }]);
+        }
+      },
+      err => setGpsError(err.message),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+    setScreen("active");
+  };
+
+  const finishRun = () => {
+    runningRef.current = false;
+    if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
+    clearInterval(timerRef.current);
+    setScreen("summary");
+  };
+
+  const saveRun = () => {
+    const weightKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
+    const calories = Math.round(totalDistKm * weightKg);
+    const now = new Date();
+    const runStart = new Date(now.getTime() - elapsed * 1000);
+    onSave({
+      id: Date.now(),
+      type: "Run",
+      name: runName,
+      date: now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      duration: Math.max(1, Math.round(elapsed / 60)),
+      calories,
+      sets: 0,
+      distance: Math.round(totalDistKm * 100) / 100,
+      pace: paceStr,
+      elevationGain: elevationGain > 0 ? Math.round(elevationGain) : null,
+      route,
+      exercises: [],
+    });
+    // Write to Apple Health / Health Connect if available
+    if (hkAvailable && totalDistKm > 0) {
+      saveRunToHealth({
+        startDate: runStart.toISOString(),
+        endDate: now.toISOString(),
+        distanceKm: totalDistKm,
+        calories,
+      }).catch(() => {});
+    }
+    onClose();
+  };
+
+  const routeLatLngs = route.map(p => [p.lat, p.lng]);
+  const gpsReady = gpsAccuracy != null && gpsAccuracy <= 30;
+
+  if (screen === "pre") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column", padding: 24, paddingTop: 60 }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 16, left: 16, background: "none", border: "none", color: COLORS.muted, fontSize: 24, cursor: "pointer" }}>✕</button>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+          <div style={{ fontSize: 64 }}>🏃</div>
+          <h2 style={{ margin: 0, fontFamily: "'Space Mono',monospace", color: COLORS.text, fontSize: 22 }}>Track a Run</h2>
+          {gpsError ? (
+            <div style={{ color: COLORS.warn, fontSize: 13, textAlign: "center", maxWidth: 280 }}>{gpsError}</div>
+          ) : gpsAccuracy == null ? (
+            <div style={{ color: COLORS.muted, fontSize: 13 }}>Acquiring GPS signal...</div>
+          ) : (
+            <div style={{ color: gpsReady ? COLORS.accent : COLORS.yellow, fontSize: 13, fontWeight: 700 }}>
+              {gpsReady ? `GPS ready  ±${gpsAccuracy} m` : `Improving accuracy...  ±${gpsAccuracy} m`}
+            </div>
+          )}
+          {profile.location ? <div style={{ fontSize: 12, color: COLORS.muted }}>📍 {profile.location}</div> : null}
+          <button onClick={startRun} disabled={!gpsReady} style={{ padding: "16px 48px", background: gpsReady ? COLORS.accent : COLORS.accentDim, color: gpsReady ? "#000" : COLORS.accent, border: "none", borderRadius: 16, fontWeight: 900, fontSize: 16, cursor: gpsReady ? "pointer" : "default", fontFamily: "'Space Mono',monospace", marginTop: 12 }}>
+            Start Run
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === "active") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          {currentPos ? (
+            <MapContainer center={[currentPos.lat, currentPos.lng]} zoom={16} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl={false}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {routeLatLngs.length >= 2 && <Polyline positions={routeLatLngs} color={COLORS.accent} weight={5} opacity={0.9} />}
+              <MapAutoCenter pos={currentPos} />
+            </MapContainer>
+          ) : (
+            <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.muted, fontSize: 13 }}>Waiting for GPS...</div>
+          )}
+          <div style={{ position: "absolute", top: 12, right: 12, zIndex: 500, background: COLORS.card + "ee", borderRadius: 20, padding: "6px 12px", fontSize: 11, color: paused ? COLORS.yellow : (gpsAccuracy <= 20 ? COLORS.accent : COLORS.yellow), fontWeight: 700, border: `1px solid ${COLORS.border}` }}>
+            {paused ? "⏸ Paused" : `● GPS ±${gpsAccuracy ?? "--"} m`}
+          </div>
+        </div>
+        <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.border}`, padding: "16px 20px 32px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 30, fontWeight: 900, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{displayDist.toFixed(2)}</div>
+              <div style={{ fontSize: 10, color: COLORS.muted, textTransform: "uppercase" }}>{distUnit}</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 30, fontWeight: 900, color: COLORS.accent, fontFamily: "'Space Mono',monospace" }}>{paceStr}</div>
+              <div style={{ fontSize: 10, color: COLORS.muted, textTransform: "uppercase" }}>/{distUnit}</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 30, fontWeight: 900, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{elapsedStr}</div>
+              <div style={{ fontSize: 10, color: COLORS.muted, textTransform: "uppercase" }}>time</div>
+            </div>
+          </div>
+          {elevationGain > 0 && <div style={{ fontSize: 12, color: COLORS.blue, marginBottom: 10, textAlign: "center" }}>▲ {Math.round(elevationGain)} m elevation gain</div>}
+          <div style={{ display: "flex", gap: 12 }}>
+            <button onClick={() => setPaused(p => !p)} style={{ flex: 1, padding: 14, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 14, color: COLORS.text, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+              {paused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+            <button onClick={finishRun} style={{ flex: 1, padding: 14, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+              Finish
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Summary
+  const weightKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
+  const calories = Math.round(totalDistKm * weightKg);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, overflowY: "auto" }}>
+      <div style={{ padding: "20px 20px 100px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, paddingTop: 40 }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer", padding: 0 }}>✕</button>
+          <h2 style={{ margin: 0, fontFamily: "'Space Mono',monospace", fontSize: 18, color: COLORS.text }}>Run Complete</h2>
+          <div style={{ marginLeft: "auto", fontSize: 24 }}>🎉</div>
+        </div>
+        {routeLatLngs.length >= 2 && (
+          <div style={{ height: 200, borderRadius: 16, overflow: "hidden", marginBottom: 16 }}>
+            <MapContainer center={routeLatLngs[Math.floor(routeLatLngs.length / 2)]} zoom={15} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl={false} dragging={false} scrollWheelZoom={false}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Polyline positions={routeLatLngs} color={COLORS.accent} weight={4} opacity={0.9} />
+            </MapContainer>
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+          {[
+            { label: "Distance", value: `${displayDist.toFixed(2)} ${distUnit}`, color: COLORS.accent },
+            { label: "Time", value: elapsedStr, color: COLORS.text },
+            { label: "Avg Pace", value: `${paceStr}/${distUnit}`, color: COLORS.blue },
+            { label: "Calories", value: `${calories} kcal`, color: COLORS.orange },
+            ...(elevationGain > 0 ? [{ label: "Elev Gain", value: `${Math.round(elevationGain)} m`, color: COLORS.yellow }] : []),
+          ].map(s => (
+            <div key={s.label} style={{ background: COLORS.card, borderRadius: 12, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: "'Space Mono',monospace" }}>{s.value}</div>
+              <div style={{ fontSize: 10, color: COLORS.muted, marginTop: 2, textTransform: "uppercase" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Run Name</label>
+          <input value={runName} onChange={e => setRunName(e.target.value)} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 14px", color: COLORS.text, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 0 }}>
+          <button onClick={async () => {
+            const text = buildShareText({ type: "Run", name: runName, duration: Math.round(elapsed / 60), distance: Math.round(totalDistKm * 100) / 100, pace: paceStr, calories, elevationGain: Math.round(elevationGain) || 0 });
+            const r = await shareWorkout(text, runName);
+            if (r === "copied") { setRunCopied(true); setTimeout(() => setRunCopied(false), 2500); }
+          }} style={{ flex: 1, padding: 14, background: `${COLORS.blue}18`, border: `1px solid ${COLORS.blue}44`, borderRadius: 14, color: runCopied ? COLORS.accent : COLORS.blue, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            {runCopied ? "Copied!" : "↗ Share"}
+          </button>
+          <button onClick={saveRun} style={{ flex: 2, padding: 14, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 900, fontSize: 16, cursor: "pointer", fontFamily: "'Space Mono',monospace" }}>
+            Save Run
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Weight Log Components ────────────────────────────────────────────────────
+
+function WeightMiniChart({ entries }) {
+  if (entries.length < 2) return null;
+
+  const W = 300, H = 72, PAD = 6;
+  const weights = entries.map(e => e.w);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 0.5;
+
+  const toX = i => PAD + (i / (entries.length - 1)) * (W - PAD * 2);
+  const toY = w => H - PAD - ((w - minW) / range) * (H - PAD * 2);
+
+  const linePts = entries.map((e, i) => `${toX(i).toFixed(1)},${toY(e.w).toFixed(1)}`).join(" ");
+  const first = weights[0], last = weights[weights.length - 1];
+  const trendColor = last <= first ? COLORS.accent : COLORS.warn;
+
+  const fillPts = `${toX(0).toFixed(1)},${H} ${linePts} ${toX(entries.length - 1).toFixed(1)},${H}`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible" }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="wfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={trendColor} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={fillPts} fill="url(#wfill)" />
+      <polyline points={linePts} fill="none" stroke={trendColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={toX(0)} cy={toY(first)} r="4" fill={trendColor} />
+      <circle cx={toX(entries.length - 1)} cy={toY(last)} r="4" fill={trendColor} />
+    </svg>
+  );
+}
+
+function LogWeightModal({ onClose, onSave, unit, lastWeight, todayStr }) {
+  const [val, setVal] = useState(lastWeight != null ? String(lastWeight) : "");
+  const [date, setDate] = useState(todayStr);
+
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 14px", color: COLORS.text, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  const handle = () => {
+    const w = parseFloat(val);
+    if (!w || w <= 0) return;
+    onSave(date, Math.round(w * 10) / 10);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Weight</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
+        </div>
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Weight ({unit})</label>
+        <input
+          type="number" step="0.1" min="20" max="500"
+          value={val} onChange={e => setVal(e.target.value)}
+          autoFocus
+          placeholder={unit === "lbs" ? "e.g. 160" : "e.g. 72"}
+          style={{ ...inputStyle, marginBottom: 16, fontSize: 28, fontWeight: 800, fontFamily: "'Space Mono',monospace", textAlign: "center" }}
+        />
+        <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Date</label>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputStyle, marginBottom: 22 }} />
+        <button onClick={handle} disabled={!val || isNaN(parseFloat(val))}
+          style={{ width: "100%", padding: "14px 0", background: COLORS.accent, color: "#000", border: "none", borderRadius: 14, fontWeight: 800, fontSize: 16, cursor: "pointer", opacity: val ? 1 : 0.5 }}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Notification Settings Component ─────────────────────────────────────────
+
+function NotifSettings({ profile, setProfile }) {
+  const [perm, setPerm] = useState(getPermission);
+
+  const toggle = (key) => setProfile(p => ({ ...p, [key]: !p[key] }));
+  const setTime = (key, val) => setProfile(p => ({ ...p, [key]: val }));
+
+  const handleEnable = async () => {
+    const granted = await requestPermission();
+    setPerm(granted ? "granted" : "denied");
+  };
+
+  const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${COLORS.border}` };
+  const switchStyle = (on) => ({ width: 44, height: 26, borderRadius: 99, background: on ? COLORS.accent : COLORS.border, border: "none", cursor: "pointer", position: "relative", flexShrink: 0 });
+  const thumbStyle = (on) => ({ position: "absolute", top: 3, left: on ? 20 : 3, width: 20, height: 20, borderRadius: "50%", background: on ? "#000" : COLORS.mutedLight, transition: "left 0.2s", boxShadow: "0 1px 3px #0004" });
+  const timeStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "5px 10px", color: COLORS.text, fontSize: 13, outline: "none" };
+
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Notifications</p>
+
+      {perm === "unsupported" && (
+        <p style={{ fontSize: 13, color: COLORS.muted }}>Notifications are not supported in this browser.</p>
+      )}
+
+      {perm === "denied" && (
+        <div style={{ fontSize: 13, color: COLORS.warn, lineHeight: 1.5 }}>
+          Notifications are blocked. Enable them in your browser or device settings, then reload.
+        </div>
+      )}
+
+      {perm === "default" && (
+        <button onClick={handleEnable}
+          style={{ width: "100%", padding: "11px 0", background: `${COLORS.accent}18`, border: `1px solid ${COLORS.accent}44`, borderRadius: 12, color: COLORS.accent, fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 4 }}>
+          Enable Notifications
+        </button>
+      )}
+
+      {perm === "granted" && (
+        <>
+          <div style={rowStyle}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Supplement reminder</div>
+              <input type="time" value={profile.notifSupplementTime || "08:00"} onChange={e => setTime("notifSupplementTime", e.target.value)}
+                disabled={!profile.notifSupplements} style={{ ...timeStyle, opacity: profile.notifSupplements ? 1 : 0.4, marginTop: 4 }} />
+            </div>
+            <button onClick={() => toggle("notifSupplements")} style={switchStyle(profile.notifSupplements)}>
+              <div style={thumbStyle(profile.notifSupplements)} />
+            </button>
+          </div>
+          <div style={rowStyle}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Hydration check</div>
+              <input type="time" value={profile.notifWaterTime || "12:00"} onChange={e => setTime("notifWaterTime", e.target.value)}
+                disabled={!profile.notifWater} style={{ ...timeStyle, opacity: profile.notifWater ? 1 : 0.4, marginTop: 4 }} />
+            </div>
+            <button onClick={() => toggle("notifWater")} style={switchStyle(profile.notifWater)}>
+              <div style={thumbStyle(profile.notifWater)} />
+            </button>
+          </div>
+          <div style={{ ...rowStyle, borderBottom: "none" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Meal log reminder</div>
+              <input type="time" value={profile.notifMealTime || "18:00"} onChange={e => setTime("notifMealTime", e.target.value)}
+                disabled={!profile.notifMeals} style={{ ...timeStyle, opacity: profile.notifMeals ? 1 : 0.4, marginTop: 4 }} />
+            </div>
+            <button onClick={() => toggle("notifMeals")} style={switchStyle(profile.notifMeals)}>
+              <div style={thumbStyle(profile.notifMeals)} />
+            </button>
+          </div>
+          <p style={{ margin: "10px 0 0", fontSize: 11, color: COLORS.muted }}>Reminders fire once per day when the app is open.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial, onSignOut, tourHL }) {
+function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutorial, onSignOut, tourHL, exportData }) {
   const hlProfile = (id) => tourHL === id
     ? { outline: `2px solid ${COLORS.accent}`, outlineOffset: 3, borderRadius: 14, animation: "tourPulse 1.8s ease-in-out infinite" }
     : {};
@@ -813,6 +1479,10 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 5 }}>Full Name</label>
           <input value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} style={{ ...inputStyle, opacity: editing ? 1 : 0.7 }} disabled={!editing} placeholder="e.g. Alex Johnson" />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 5 }}>Location</label>
+          <input value={draft.location || ""} onChange={e => setDraft(p => ({ ...p, location: e.target.value }))} style={{ ...inputStyle, opacity: editing ? 1 : 0.7 }} disabled={!editing} placeholder="City, Country" />
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 5 }}>Age</label>
@@ -910,6 +1580,78 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
         </div>
       </div>
 
+      {/* Notifications */}
+      <NotifSettings profile={profile} setProfile={setProfile} />
+
+      {/* Export Data */}
+      {exportData && (() => {
+        const { meals, workouts, waterLog, weightLog, sleepLog, supplements, prs } = exportData;
+
+        const exportMeals = () => downloadCSV(
+          "nourishfit-meals.csv",
+          ["Date", "Time", "Name", "Calories (kcal)", "Protein (g)", "Carbs (g)", "Fat (g)"],
+          meals.map(m => [m.logged_date ?? "", m.time ?? "", m.name, m.calories, m.protein, m.carbs, m.fat])
+        );
+
+        const exportWorkouts = () => {
+          const rows = [];
+          workouts.forEach(w => {
+            if (w.exercises?.length) {
+              w.exercises.forEach(ex => rows.push([w.date, w.name, w.type, w.duration, w.calories, ex.name, ex.sets?.length ?? ""]));
+            } else {
+              rows.push([w.date, w.name, w.type, w.duration, w.calories, "", ""]);
+            }
+          });
+          downloadCSV("nourishfit-workouts.csv",
+            ["Date", "Session", "Type", "Duration (min)", "Est. Calories", "Exercise", "Sets"],
+            rows.length ? rows : [["", "", "", "", "", "", ""]]);
+        };
+
+        const exportHealth = () => {
+          const dates = [...new Set([...Object.keys(waterLog), ...Object.keys(weightLog), ...Object.keys(sleepLog)])].sort();
+          downloadCSV("nourishfit-health-metrics.csv",
+            ["Date", `Weight (${profile.weightUnit})`, "Water (ml)", "Sleep (hours)", "Sleep Quality"],
+            dates.map(d => [d, weightLog[d] ?? "", waterLog[d] ?? "", sleepLog[d]?.hours ?? "", sleepLog[d]?.quality ?? ""]));
+        };
+
+        const exportSupplements = () => {
+          const allDates = [...new Set(supplements.flatMap(s => Object.keys(s.history || {})))].sort().slice(-30);
+          downloadCSV("nourishfit-supplements.csv",
+            ["Supplement", "Dose", "Timing", ...allDates],
+            supplements.map(s => [s.name, s.dose ?? "", s.timing ?? "", ...allDates.map(d => s.history?.[d] ? "1" : "0")]));
+        };
+
+        const exportPRs = () => downloadCSV(
+          "nourishfit-personal-records.csv",
+          ["Exercise", "Best 1RM (kg)", "Best Weight (kg)", "Best Reps", "Date"],
+          Object.entries(prs).map(([name, r]) => [name, r.best1rm, r.bestWeight, r.bestReps, r.date ?? ""])
+        );
+
+        const btnStyle = { width: "100%", padding: "11px 0", background: `${COLORS.blue}14`, border: `1px solid ${COLORS.blue}33`, borderRadius: 11, color: COLORS.blue, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "left", paddingLeft: 14, display: "flex", alignItems: "center", gap: 10 };
+
+        return (
+          <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+            <p style={{ margin: "0 0 12px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Export Data</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { icon: "🥗", label: "Meals",             action: exportMeals,       disabled: meals.length === 0 },
+                { icon: "💪", label: "Workouts",          action: exportWorkouts,    disabled: workouts.length === 0 },
+                { icon: "📈", label: "Health Metrics",    action: exportHealth,      disabled: !Object.keys({ ...waterLog, ...weightLog, ...sleepLog }).length },
+                { icon: "💊", label: "Supplements",       action: exportSupplements, disabled: supplements.length === 0 },
+                { icon: "🏆", label: "Personal Records",  action: exportPRs,         disabled: Object.keys(prs).length === 0 },
+              ].map(({ icon, label, action, disabled }) => (
+                <button key={label} onClick={action} disabled={disabled}
+                  style={{ ...btnStyle, opacity: disabled ? 0.4 : 1, cursor: disabled ? "default" : "pointer" }}>
+                  <span style={{ fontSize: 16 }}>{icon}</span>
+                  <span style={{ flex: 1 }}>{label}</span>
+                  <span style={{ fontSize: 11, color: COLORS.muted, marginRight: 4 }}>{disabled ? "No data" : "↓ CSV"}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Help */}
       <div style={{ background: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}`, ...hlProfile("help-section") }}>
         <p style={{ margin: "0 0 14px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Help</p>
@@ -1000,6 +1742,182 @@ function AddSupplementModal({ onClose, onAdd }) {
   );
 }
 
+// ─── Food Database Search Modal (Open Food Facts) ────────────────────────────
+
+function FoodSearchModal({ onClose, onAdd }) {
+  const [query, setQuery]       = useState("");
+  const [results, setResults]   = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [selected, setSelected] = useState(null); // product being portioned
+  const [grams, setGrams]       = useState("100");
+  const timerRef = useRef(null);
+
+  const search = (q) => {
+    if (!q.trim()) { setResults([]); return; }
+    setLoading(true);
+    setError(null);
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=15&fields=product_name,brands,serving_size,nutriments`;
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        const items = (data.products || []).filter(p => p.product_name?.trim());
+        setResults(items);
+        if (!items.length) setError("No results found.");
+      })
+      .catch(() => setError("Search failed — check your connection."))
+      .finally(() => setLoading(false));
+  };
+
+  const handleInput = (val) => {
+    setQuery(val);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => search(val), 450);
+  };
+
+  const pick = (product) => {
+    const n = product.nutriments || {};
+    const serving = parseFloat(product.serving_size) || 100;
+    setGrams(String(serving));
+    setSelected({ product, n100: {
+      kcal:    n["energy-kcal_100g"]    ?? n["energy_100g"] / 4.184 ?? 0,
+      protein: n["proteins_100g"]       ?? 0,
+      carbs:   n["carbohydrates_100g"]  ?? 0,
+      fat:     n["fat_100g"]            ?? 0,
+    }});
+  };
+
+  const addToLog = () => {
+    const g = parseFloat(grams) || 100;
+    const ratio = g / 100;
+    const { n100, product } = selected;
+    onAdd({
+      id: Date.now(),
+      name: product.product_name,
+      img: "🍽️",
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      calories: Math.round(n100.kcal    * ratio),
+      protein:  Math.round(n100.protein * ratio),
+      carbs:    Math.round(n100.carbs   * ratio),
+      fat:      Math.round(n100.fat     * ratio),
+    });
+    onClose();
+  };
+
+  const inputStyle = {
+    background: COLORS.bg, border: `1px solid ${COLORS.border}`,
+    borderRadius: 10, padding: "10px 14px", color: COLORS.text,
+    fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px 0", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          {selected
+            ? <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: COLORS.accent, fontWeight: 700, fontSize: 14, cursor: "pointer", padding: 0 }}>← Back</button>
+            : <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Search Food</h3>
+          }
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
+        </div>
+
+        {!selected ? (
+          <>
+            {/* Search input */}
+            <input
+              autoFocus
+              placeholder="e.g. Greek yogurt, brown rice, banana…"
+              value={query}
+              onChange={e => handleInput(e.target.value)}
+              style={{ ...inputStyle, marginBottom: 12 }}
+            />
+
+            {/* Results */}
+            <div style={{ overflowY: "auto", flex: 1, paddingBottom: 24 }}>
+              {loading && <div style={{ textAlign: "center", padding: 24, color: COLORS.muted, fontSize: 13 }}>Searching…</div>}
+              {!loading && error && <div style={{ textAlign: "center", padding: 24, color: COLORS.muted, fontSize: 13 }}>{error}</div>}
+              {!loading && !error && results.length === 0 && query.trim() && (
+                <div style={{ textAlign: "center", padding: 24, color: COLORS.muted, fontSize: 13 }}>Type to search the Open Food Facts database</div>
+              )}
+              {!loading && !error && results.length === 0 && !query.trim() && (
+                <div style={{ textAlign: "center", padding: 32, color: COLORS.muted, fontSize: 13, lineHeight: 1.7 }}>
+                  Search over 3 million foods from the Open Food Facts database. Macros auto-fill from the database.
+                </div>
+              )}
+              {results.map((p, i) => {
+                const n = p.nutriments || {};
+                const kcal    = Math.round(n["energy-kcal_100g"]   ?? (n["energy_100g"] / 4.184) ?? 0);
+                const protein = Math.round(n["proteins_100g"]      ?? 0);
+                const carbs   = Math.round(n["carbohydrates_100g"] ?? 0);
+                const fat     = Math.round(n["fat_100g"]           ?? 0);
+                return (
+                  <button key={i} onClick={() => pick(p)}
+                    style={{ width: "100%", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, textAlign: "left", cursor: "pointer", display: "block" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 3, lineHeight: 1.3 }}>{p.product_name}</div>
+                    {p.brands && <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>{p.brands.split(",")[0]}</div>}
+                    <div style={{ display: "flex", gap: 10, fontSize: 11, color: COLORS.mutedLight }}>
+                      <span style={{ color: COLORS.yellow, fontWeight: 700 }}>{kcal} kcal</span>
+                      <span>P {protein}g</span>
+                      <span>C {carbs}g</span>
+                      <span>F {fat}g</span>
+                      <span style={{ marginLeft: "auto", color: COLORS.muted }}>per 100g</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          /* Portion screen */
+          <div style={{ paddingBottom: 28 }}>
+            <div style={{ background: COLORS.card, borderRadius: 14, padding: "14px 16px", marginBottom: 18, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, marginBottom: 2 }}>{selected.product.product_name}</div>
+              {selected.product.brands && <div style={{ fontSize: 12, color: COLORS.muted }}>{selected.product.brands.split(",")[0]}</div>}
+            </div>
+
+            <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Amount (grams)</label>
+            <input
+              type="number" min="1" max="2000" step="1"
+              value={grams} onChange={e => setGrams(e.target.value)}
+              autoFocus
+              style={{ ...inputStyle, fontSize: 26, fontWeight: 800, fontFamily: "'Space Mono',monospace", textAlign: "center", marginBottom: 18 }}
+            />
+
+            {/* Adjusted macro preview */}
+            {(() => {
+              const g = parseFloat(grams) || 0;
+              const r = g / 100;
+              const { n100 } = selected;
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 22 }}>
+                  {[
+                    { label: "Calories", value: Math.round(n100.kcal * r),    unit: "kcal", color: COLORS.yellow  },
+                    { label: "Protein",  value: Math.round(n100.protein * r), unit: "g",    color: COLORS.accent  },
+                    { label: "Carbs",    value: Math.round(n100.carbs * r),   unit: "g",    color: COLORS.blue    },
+                    { label: "Fat",      value: Math.round(n100.fat * r),     unit: "g",    color: COLORS.orange  },
+                  ].map(m => (
+                    <div key={m.label} style={{ background: COLORS.card, borderRadius: 10, padding: "10px 6px", textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: m.color, fontFamily: "'Space Mono',monospace" }}>{m.value}</div>
+                      <div style={{ fontSize: 9, color: COLORS.muted }}>{m.unit}</div>
+                      <div style={{ fontSize: 9, color: COLORS.mutedLight, marginTop: 1, fontWeight: 600 }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <button onClick={addToLog} disabled={!grams || parseFloat(grams) <= 0}
+              style={{ width: "100%", padding: "14px 0", background: COLORS.accent, color: "#000", border: "none", borderRadius: 14, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+              Add to Log
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Manual Meal Modal ────────────────────────────────────────────────────────
 
 function ManualMealModal({ onClose, onAdd }) {
@@ -1055,6 +1973,7 @@ function ManualMealModal({ onClose, onAdd }) {
 function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, resting, onFinish, onClose }) {
   const [showSummary, setShowSummary] = useState(false);
   const [allDonePrompt, setAllDonePrompt] = useState(false);
+  const [sessionCopied, setSessionCopied] = useState(false);
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const estCals = Math.round((sessionElapsed / 3600) * 4.5 * (session.userWeightKg || 70));
 
@@ -1124,6 +2043,13 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button onClick={() => setShowSummary(false)} style={{ flex: 1, padding: 12, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 14, color: COLORS.muted, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Back</button>
+          <button onClick={async () => {
+            const text = buildShareText({ type: session.sessionType || "Strength", name: session.sessionName || "Workout", duration: durationMin, calories: estCals, sets: totalSets, exercises: validExercises });
+            const r = await shareWorkout(text, session.sessionName || "Workout");
+            if (r === "copied") { setSessionCopied(true); setTimeout(() => setSessionCopied(false), 2500); }
+          }} style={{ padding: "12px 14px", background: `${COLORS.blue}18`, border: `1px solid ${COLORS.blue}44`, borderRadius: 14, color: sessionCopied ? COLORS.accent : COLORS.blue, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            {sessionCopied ? "Copied!" : "↗ Share"}
+          </button>
           <button onClick={() => onFinish({ durationMin, estCals, validExercises, totalSets })} style={{ flex: 2, padding: 13, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Save Session</button>
         </div>
       </div>
@@ -1847,7 +2773,8 @@ export default function App() {
   }, [authSession?.user?.id]);
 
   // ── Profile sync helpers ────────────────────────────────────────────────────
-  const EMPTY_PROFILE = { name: "", age: "", gender: "male", weight: "", weightUnit: "kg", height: "", heightUnit: "cm", goal: "maintain", activityLevel: "moderate", cheatDays: 1 };
+  const NOTIF_DEFAULTS = { notifSupplements: true, notifSupplementTime: "08:00", notifWater: true, notifWaterTime: "12:00", notifMeals: true, notifMealTime: "18:00" };
+  const EMPTY_PROFILE = { name: "", age: "", gender: "male", weight: "", weightUnit: "kg", height: "", heightUnit: "cm", goal: "maintain", activityLevel: "moderate", cheatDays: 1, location: "", ...NOTIF_DEFAULTS };
 
   function dbToProfile(row) {
     return {
@@ -1862,6 +2789,7 @@ export default function App() {
       activityLevel: row.activity_level ?? "moderate",
       cheatDays:     row.cheat_days    ?? 1,
       waterGoal:     row.water_goal    ?? 2500,
+      location:      row.location      ?? "",
     };
   }
 
@@ -1879,6 +2807,7 @@ export default function App() {
       activity_level: p.activityLevel || "moderate",
       cheat_days:     p.cheatDays     ?? 1,
       water_goal:     p.waterGoal     ?? 2500,
+      location:       p.location      || null,
       updated_at:     new Date().toISOString(),
     };
   }
@@ -1902,7 +2831,16 @@ export default function App() {
         if (!data?.length) return;
         setWaterLog(prev => {
           const merged = { ...prev };
-          data.forEach(r => { merged[r.date] = r.ml; });
+          const todayLocal = new Date();
+          const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
+          data.forEach(r => {
+            // For today: keep the higher value so a stale Supabase 0 never wipes out local progress
+            if (r.date === todayStr) {
+              merged[r.date] = Math.max(merged[r.date] || 0, r.ml || 0);
+            } else {
+              merged[r.date] = r.ml;
+            }
+          });
           return merged;
         });
       });
@@ -1962,8 +2900,20 @@ export default function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [showActiveWorkout, setShowActiveWorkout] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
+  const [showRunTracker, setShowRunTracker] = useState(false);
+  const [hkAvailable, setHkAvailable] = useState(false);
+  const [hkData, setHkData] = useState({ steps: null, activeCalories: null, heartRate: null, distanceKm: null, sleepHours: null });
+  const [hkSyncing, setHkSyncing] = useState(false);
+  const [hkLastSync, setHkLastSync] = useState(null);
   const [showInjury, setShowInjury] = useState(false);
   const [showManualMeal, setShowManualMeal] = useState(false);
+  const [showFoodSearch, setShowFoodSearch] = useState(false);
+  const [showAddPR, setShowAddPR] = useState(false);
+  const [prs, setPrs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_prs")) || {}; } catch { return {}; }
+  });
+  const [prToast, setPrToast] = useState(null);
+  const [shareToast, setShareToast] = useState(false);
   const [showAddSupp, setShowAddSupp] = useState(false);
   const [editingInjury, setEditingInjury] = useState(null);
   const [routineDay, setRoutineDay] = useState(null); // { key, label }
@@ -2006,12 +2956,16 @@ export default function App() {
 
   const [profile, setProfile] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("nf_profile")) || {
+      const saved = JSON.parse(localStorage.getItem("nf_profile"));
+      return saved ? { notifSupplements: true, notifSupplementTime: "08:00", notifWater: true, notifWaterTime: "12:00", notifMeals: true, notifMealTime: "18:00", ...saved } : {
         name: "", age: "", gender: "male",
         weight: "", weightUnit: "kg",
         height: "", heightUnit: "cm",
         goal: "maintain", activityLevel: "moderate",
-        cheatDays: 1,
+        cheatDays: 1, location: "",
+        notifSupplements: true, notifSupplementTime: "08:00",
+        notifWater: true, notifWaterTime: "12:00",
+        notifMeals: true, notifMealTime: "18:00",
       };
     } catch {
       return {
@@ -2019,7 +2973,10 @@ export default function App() {
         weight: "", weightUnit: "kg",
         height: "", heightUnit: "cm",
         goal: "maintain", activityLevel: "moderate",
-        cheatDays: 1,
+        cheatDays: 1, location: "",
+        notifSupplements: true, notifSupplementTime: "08:00",
+        notifWater: true, notifWaterTime: "12:00",
+        notifMeals: true, notifMealTime: "18:00",
       };
     }
   });
@@ -2052,7 +3009,8 @@ export default function App() {
   const weeklyCalBudget = calorieGoal * (7 - profile.cheatDays) + cheatDayCalories * profile.cheatDays;
 
   const userWeightKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
-  const todayKey = new Date().toISOString().slice(0, 10); // "2026-04-08"
+  const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const todayKey = localDateKey();
   const DAYS_MAP = [{ key: "sun", label: "Sun" }, { key: "mon", label: "Mon" }, { key: "tue", label: "Tue" }, { key: "wed", label: "Wed" }, { key: "thu", label: "Thu" }, { key: "fri", label: "Fri" }, { key: "sat", label: "Sat" }];
   const todayDayKey = DAYS_MAP[new Date().getDay()].key;
   const todayRoutine = weeklyRoutine[todayDayKey];
@@ -2095,6 +3053,32 @@ export default function App() {
   };
   const handleFinishSession = ({ durationMin, estCals, validExercises, totalSets }) => {
     setWorkouts(prev => [{ id: Date.now(), type: activeSession.sessionType || "Strength", name: activeSession.sessionName || "Workout Session", duration: durationMin, calories: estCals, sets: totalSets, date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), exercises: validExercises }, ...prev]);
+
+    // Detect new personal records
+    const dateStr = todayKey;
+    const updates = {};
+    const newPRNames = [];
+    validExercises.forEach(ex => {
+      const name = ex.name;
+      ex.sets.forEach(set => {
+        const oneRM = epley1RM(set.weight, set.reps);
+        if (oneRM <= 0) return;
+        const current = updates[name] || prs[name] || { best1rm: 0, history: [] };
+        if (oneRM > current.best1rm) {
+          const entry = { date: dateStr, weight: parseFloat(set.weight), reps: parseInt(set.reps), oneRM };
+          updates[name] = { best1rm: oneRM, bestWeight: parseFloat(set.weight), bestReps: parseInt(set.reps), date: dateStr, history: [...(current.history || []), entry] };
+          if (!newPRNames.includes(name)) newPRNames.push(name);
+        }
+      });
+    });
+    if (Object.keys(updates).length > 0) {
+      setPrs(prev => ({ ...prev, ...updates }));
+      if (newPRNames.length > 0) {
+        setPrToast(newPRNames);
+        setTimeout(() => setPrToast(null), 4000);
+      }
+    }
+
     setActiveSession(null);
     setShowActiveWorkout(false);
   };
@@ -2134,12 +3118,18 @@ export default function App() {
   const [waterLog, setWaterLog] = useState(() => {
     try { return JSON.parse(localStorage.getItem("nf_water")) || {}; } catch { return {}; }
   });
+  const [weightLog, setWeightLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("nf_weight_log")) || {}; } catch { return {}; }
+  });
+  const [showWeightModal, setShowWeightModal] = useState(false);
   const [progressPhotos, setProgressPhotos] = useState(() => {
     try { return JSON.parse(localStorage.getItem("nf_photos")) || []; } catch { return []; }
   });
 
   useEffect(() => { localStorage.setItem("nf_sleep", JSON.stringify(sleepLog)); }, [sleepLog]);
   useEffect(() => { localStorage.setItem("nf_water", JSON.stringify(waterLog)); }, [waterLog]);
+  useEffect(() => { localStorage.setItem("nf_weight_log", JSON.stringify(weightLog)); }, [weightLog]);
+  useEffect(() => { localStorage.setItem("nf_prs", JSON.stringify(prs)); }, [prs]);
   useEffect(() => { localStorage.setItem("nf_photos", JSON.stringify(progressPhotos)); }, [progressPhotos]);
 
   const waterToday = waterLog[todayKey] || 0;
@@ -2152,10 +3142,48 @@ export default function App() {
                  :                                           { text: "Late night grind",  emoji: "🌙" };
 
   // ── Sleep ───────────────────────────────────────────────────────────────────
-  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const _yd = new Date(); _yd.setDate(_yd.getDate() - 1);
+  const yesterdayKey = localDateKey(_yd);
   const sleepEntry = sleepLog[todayKey] || sleepLog[yesterdayKey] || null;
   const sleepDateLabel = sleepLog[todayKey] ? "Today" : sleepLog[yesterdayKey] ? "Last night" : null;
   const sleepQualityMeta = sleepEntry ? SLEEP_QUALITY.find(q => q.id === sleepEntry.quality) : null;
+
+  // ── Apple Health (HealthKit) — placed here so todayKey, yesterdayKey, setSleepLog are in scope ──
+  const syncHealthKit = useCallback(async () => {
+    if (hkSyncing) return;
+    setHkSyncing(true);
+    try {
+      const data = await syncToday(todayKey);
+      setHkData(data);
+      setHkLastSync(new Date());
+      if (data.sleepHours != null) {
+        setSleepLog(prev => {
+          if (prev[todayKey] || prev[yesterdayKey]) return prev;
+          return { ...prev, [todayKey]: { hours: data.sleepHours, quality: "good", source: "apple_health" } };
+        });
+      }
+    } catch {
+      // HealthKit not available in browser/simulator — silently no-op
+    } finally {
+      setHkSyncing(false);
+    }
+  }, [hkSyncing, todayKey, yesterdayKey]);
+
+  useEffect(() => {
+    isHealthKitAvailable().then(available => {
+      setHkAvailable(available);
+      if (available) requestHealthKitAuth().then(() => syncHealthKit()).catch(() => {});
+    });
+  // only run on mount — syncHealthKit ref is stable on first render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Schedule daily notification reminders when the app opens or prefs change
+  useEffect(() => {
+    const ids = scheduleAll(profile, supplements.length);
+    return () => ids.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.notifSupplements, profile.notifSupplementTime, profile.notifWater, profile.notifWaterTime, profile.notifMeals, profile.notifMealTime, supplements.length]);
 
   // ── Recovery (from workout timestamps) ─────────────────────────────────────
   const sortedByRecent = [...workouts].sort((a, b) => b.id - a.id);
@@ -2315,7 +3343,7 @@ export default function App() {
         {/* ── DASHBOARD ── */}
         {tab === "dashboard" && (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: hkAvailable ? 8 : 14 }}>
               {[
                 { label: "Calories", value: totalCals, unit: "kcal", color: COLORS.yellow, icon: "⚡" },
                 { label: "Workouts", value: workouts.filter(w => w.date === "Today").length, unit: "today", color: COLORS.accent, icon: "△" },
@@ -2330,6 +3358,107 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* Week in Review */}
+            <WeeklySummaryCard
+              meals={meals}
+              workouts={workouts}
+              waterLog={waterLog}
+              waterGoal={waterGoal}
+              sleepLog={sleepLog}
+              supplements={supplements}
+              calorieGoal={calorieGoal}
+            />
+
+            {/* Apple Health row — only rendered when HealthKit is available (native iOS build) */}
+            {hkAvailable && (
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: "12px 14px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ fontSize: 15 }}>❤️</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Apple Health</span>
+                    {hkLastSync && <span style={{ fontSize: 9, color: COLORS.muted }}>· synced {hkLastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>}
+                  </div>
+                  <button
+                    onClick={syncHealthKit}
+                    disabled={hkSyncing}
+                    style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, background: hkSyncing ? COLORS.accentDim : COLORS.accent, color: hkSyncing ? COLORS.accent : "#000", border: "none", cursor: hkSyncing ? "default" : "pointer" }}
+                  >
+                    {hkSyncing ? "Syncing…" : "Sync"}
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                  {[
+                    { label: "Steps",       value: hkData.steps        != null ? hkData.steps.toLocaleString() : "--",        unit: "today",   color: COLORS.accent  },
+                    { label: "Active Cal",  value: hkData.activeCalories != null ? `${hkData.activeCalories}` : "--",          unit: "kcal",    color: COLORS.orange  },
+                    { label: "Heart Rate",  value: hkData.heartRate     != null ? hkData.heartRate : "--",                     unit: "bpm avg", color: COLORS.warn    },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: COLORS.bg, borderRadius: 10, padding: "10px 8px", textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: s.color, fontFamily: "'Space Mono',monospace" }}>{s.value}</div>
+                      <div style={{ fontSize: 9, color: COLORS.muted }}>{s.unit}</div>
+                      <div style={{ fontSize: 9, color: COLORS.mutedLight, marginTop: 1, fontWeight: 600 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {hkData.distanceKm != null && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: COLORS.muted, textAlign: "center" }}>
+                    🚶 {profile.weightUnit === "lbs" ? `${(hkData.distanceKm * 0.621371).toFixed(2)} mi` : `${hkData.distanceKm.toFixed(2)} km`} walked / run today
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Weight log card */}
+            {(() => {
+              const allEntries = Object.entries(weightLog)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([date, w]) => ({ date, w }));
+              const last30 = allEntries.slice(-30);
+              const latest = allEntries[allEntries.length - 1];
+              const prev   = allEntries[allEntries.length - 2];
+              const delta  = latest && prev ? Math.round((latest.w - prev.w) * 10) / 10 : null;
+              const unit   = profile.weightUnit || "kg";
+              return (
+                <div style={{ background: COLORS.card, borderRadius: 14, padding: "14px 16px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: last30.length >= 2 ? 10 : 0 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Body Weight</div>
+                      {latest ? (
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 3 }}>
+                          <span style={{ fontSize: 26, fontWeight: 800, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{latest.w}</span>
+                          <span style={{ fontSize: 13, color: COLORS.muted }}>{unit}</span>
+                          {delta !== null && (
+                            <span style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? COLORS.accent : COLORS.warn }}>
+                              {delta > 0 ? "+" : ""}{delta}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>Not logged yet</div>
+                      )}
+                      {last30.length >= 2 && (() => {
+                        const first = last30[0].w, last = last30[last30.length - 1].w;
+                        const totalDelta = Math.round((last - first) * 10) / 10;
+                        return (
+                          <div style={{ fontSize: 11, color: totalDelta <= 0 ? COLORS.accent : COLORS.warn, marginTop: 2 }}>
+                            {totalDelta > 0 ? "+" : ""}{totalDelta} {unit} over {last30.length} entries
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <button onClick={() => setShowWeightModal(true)}
+                      style={{ padding: "7px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
+                      + Log
+                    </button>
+                  </div>
+                  {last30.length >= 2 ? (
+                    <WeightMiniChart entries={last30} />
+                  ) : last30.length === 1 ? (
+                    <div style={{ fontSize: 11, color: COLORS.muted, textAlign: "center", paddingTop: 8 }}>Log one more entry to see your trend</div>
+                  ) : null}
+                </div>
+              );
+            })()}
 
             {/* Today's Routine */}
             {todayRoutine && (() => {
@@ -2427,13 +3556,19 @@ export default function App() {
             if (supabase && authSession?.user?.id) supabase.from("meals").delete().eq("id", id);
           };
           const addWater = (ml) => {
-            const newTotal = (waterLog[todayKey] || 0) + ml;
-            setWaterLog(prev => ({ ...prev, [todayKey]: newTotal }));
-            if (supabase && authSession?.user?.id) supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: newTotal });
+            setWaterLog(prev => {
+              const newTotal = (prev[todayKey] || 0) + ml;
+              if (supabase && authSession?.user?.id)
+                supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: newTotal });
+              return { ...prev, [todayKey]: newTotal };
+            });
           };
           const resetWater = () => {
-            setWaterLog(prev => ({ ...prev, [todayKey]: 0 }));
-            if (supabase && authSession?.user?.id) supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: 0 });
+            setWaterLog(prev => {
+              if (supabase && authSession?.user?.id)
+                supabase.from("water_log").upsert({ user_id: authSession.user.id, date: todayKey, ml: 0 });
+              return { ...prev, [todayKey]: 0 };
+            });
           };
 
           // History: group meals by date, sorted newest first
@@ -2448,7 +3583,7 @@ export default function App() {
           // Trends: last 7 days
           const last7 = Array.from({ length: 7 }, (_, i) => {
             const d = new Date(); d.setDate(d.getDate() - (6 - i));
-            return d.toISOString().slice(0, 10);
+            return localDateKey(d);
           });
           const fmtDay = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3);
           const fmtDateShort = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -2459,9 +3594,10 @@ export default function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Nutrition</h2>
                 {nutritionView === "today" && (
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setShowManualMeal(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Manual</button>
-                    <button onClick={() => setShowScanner(true)} style={{ padding: "8px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 Scan</button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => setShowManualMeal(true)} style={{ padding: "8px 10px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>+ Manual</button>
+                    <button onClick={() => setShowFoodSearch(true)} style={{ padding: "8px 10px", background: `${COLORS.blue}22`, color: COLORS.blue, border: `1px solid ${COLORS.blue}44`, borderRadius: 10, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>🔍 Search</button>
+                    <button onClick={() => setShowScanner(true)} style={{ padding: "8px 12px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>📸 Scan</button>
                   </div>
                 )}
               </div>
@@ -2746,6 +3882,7 @@ export default function App() {
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>Workouts</h2>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setShowQuickLog(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Quick Log</button>
+                <button onClick={() => setShowRunTracker(true)} style={{ padding: "8px 12px", background: COLORS.bg, color: COLORS.blue, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>🏃 Run</button>
                 <button onClick={() => { if (activeSession) return; if (todayRoutine?.exercises?.length > 0) { setShowSessionStart(true); } else { startActiveSession(); } }} disabled={!!activeSession} style={{ padding: "8px 14px", background: activeSession ? COLORS.accentDim : COLORS.accent, color: activeSession ? COLORS.accent : "#000", border: activeSession ? `1px solid ${COLORS.accentMid}` : "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: activeSession ? "default" : "pointer" }}>{activeSession ? "● Active" : "▶ Start"}</button>
               </div>
             </div>
@@ -2852,12 +3989,14 @@ export default function App() {
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 10 }}>
                       <span style={{ fontSize: 11, color: COLORS.muted }}>{w.date}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         {hasExercises && (
                           <span style={{ fontSize: 10, color: COLORS.accent, fontWeight: 700 }}>
                             {isExpanded ? "Hide ▲" : `${w.exercises.length} ex ▼`}
                           </span>
                         )}
+                        <button onClick={async e => { e.stopPropagation(); const r = await shareWorkout(buildShareText(w), w.name); if (r === "copied") { setShareToast(true); setTimeout(() => setShareToast(false), 2500); } }}
+                          style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 13, cursor: "pointer", padding: 0, lineHeight: 1 }} title="Share workout">↗</button>
                         <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete this session?")) setWorkouts(prev => prev.filter(x => x.id !== w.id)); }}
                           style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: 0 }}>✕</button>
                       </div>
@@ -2884,6 +4023,51 @@ export default function App() {
                 </div>
               );
             })}
+
+            {/* ── Personal Records ── */}
+            <div style={{ marginTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Personal Records</p>
+                <button onClick={() => setShowAddPR(true)} style={{ padding: "6px 12px", background: COLORS.bg, color: COLORS.mutedLight, border: `1px solid ${COLORS.border}`, borderRadius: 9, fontWeight: 700, fontSize: 11, cursor: "pointer" }}>+ Add</button>
+              </div>
+
+              {Object.keys(prs).length === 0 ? (
+                <div style={{ background: COLORS.card, borderRadius: 12, padding: "20px 16px", textAlign: "center", border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 26, marginBottom: 6 }}>🏆</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>No records yet</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>Complete a session or tap + Add to log a record</div>
+                </div>
+              ) : Object.entries(prs).sort(([, a], [, b]) => (b.date || "").localeCompare(a.date || "")).map(([name, rec]) => (
+                <div key={name} style={{ background: COLORS.card, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: rec.history?.length >= 2 ? 8 : 0 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 13 }}>🏆</span>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: COLORS.text }}>{name}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: COLORS.yellow, fontFamily: "'Space Mono',monospace" }}>{rec.best1rm}</span>
+                        <span style={{ fontSize: 12, color: COLORS.muted }}>kg est. 1RM</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                        {rec.bestWeight}kg × {rec.bestReps}{rec.bestReps === 1 ? " rep" : " reps"}
+                        {rec.date && <span style={{ marginLeft: 8 }}>· {new Date(rec.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                      </div>
+                    </div>
+                    <button onClick={() => { if (window.confirm(`Delete PR for "${name}"?`)) setPrs(prev => { const n = { ...prev }; delete n[name]; return n; }); }}
+                      style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 14, cursor: "pointer", padding: "0 0 0 8px", lineHeight: 1 }}>✕</button>
+                  </div>
+                  {rec.history?.length >= 2 && <PRSparkline history={rec.history} />}
+                  {rec.history?.length >= 2 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: COLORS.muted, marginTop: 4 }}>
+                      <span>{new Date(rec.history[0].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                      <span>{rec.history.length} sessions</span>
+                      <span>{new Date(rec.history[rec.history.length - 1].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -2894,7 +4078,7 @@ export default function App() {
         {tab === "supplements" && (() => {
           const suppLast7Keys = Array.from({ length: 7 }, (_, i) => {
             const dd = new Date(); dd.setDate(dd.getDate() - 6 + i);
-            return dd.toISOString().slice(0, 10);
+            return localDateKey(dd);
           });
           const takenTodayCount = supplements.filter(s => (s.history?.[todayKey] === true ? 1 : (s.history?.[todayKey] || 0)) > 0).length;
           const totalCount = supplements.length;
@@ -2958,7 +4142,7 @@ export default function App() {
                   let streak = 0;
                   const d = new Date();
                   for (let i = 0; i < 365; i++) {
-                    const k = d.toISOString().slice(0, 10);
+                    const k = localDateKey(d);
                     if (!getDoses(s.history?.[k])) break;
                     streak++;
                     d.setDate(d.getDate() - 1);
@@ -2966,7 +4150,7 @@ export default function App() {
                   // Rolling 7-day window
                   const last7 = Array.from({ length: 7 }, (_, i) => {
                     const dd = new Date(); dd.setDate(dd.getDate() - 6 + i);
-                    return { key: dd.toISOString().slice(0, 10), label: dd.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 1) };
+                    return { key: localDateKey(dd), label: dd.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 1) };
                   });
 
                   return (
@@ -3192,6 +4376,7 @@ export default function App() {
             onShowTutorial={() => setShowOnboarding(true)}
             onSignOut={supabase ? async () => { await signOut(); setAuthSession(null); } : null}
             tourHL={tourHL}
+            exportData={{ meals, workouts, waterLog, weightLog, sleepLog, supplements, prs }}
           />
         )}
 
@@ -3225,10 +4410,54 @@ export default function App() {
         setMeals(prev => [...prev, meal]);
         if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
       }} />}
+      {showFoodSearch && <FoodSearchModal onClose={() => setShowFoodSearch(false)} onAdd={m => {
+        const meal = { ...m, logged_date: todayKey };
+        setMeals(prev => [...prev, meal]);
+        if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
+      }} />}
       {showActiveWorkout && activeSession && <ActiveWorkoutSession session={activeSession} setSession={setActiveSession} sessionElapsed={sessionElapsed} restLeft={restLeft} resting={resting} onFinish={handleFinishSession} onClose={() => setShowActiveWorkout(false)} />}
       {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
+      {showRunTracker && <RunTracker profile={profile} hkAvailable={hkAvailable} onClose={() => setShowRunTracker(false)} onSave={w => setWorkouts(prev => [w, ...prev])} />}
+      {showWeightModal && (
+        <LogWeightModal
+          unit={profile.weightUnit || "kg"}
+          lastWeight={(() => { const e = Object.entries(weightLog).sort(([a],[b]) => b.localeCompare(a)); return e.length ? e[0][1] : (parseFloat(profile.weight) || null); })()}
+          todayStr={todayKey}
+          onClose={() => setShowWeightModal(false)}
+          onSave={(date, w) => setWeightLog(prev => ({ ...prev, [date]: w }))}
+        />
+      )}
       {showInjury && <AddInjuryModal onClose={() => setShowInjury(false)} onAdd={inj => setInjuries(prev => [inj, ...prev])} />}
       {showAddSupp && <AddSupplementModal onClose={() => setShowAddSupp(false)} onAdd={s => setSupplements(prev => [...prev, s])} />}
+      {showAddPR && (
+        <AddPRModal
+          todayStr={todayKey}
+          onClose={() => setShowAddPR(false)}
+          onSave={(name, weight, reps, date, oneRM) => {
+            setPrs(prev => {
+              const cur = prev[name] || { best1rm: 0, history: [] };
+              const entry = { date, weight, reps, oneRM };
+              const history = [...(cur.history || []), entry].sort((a, b) => a.date.localeCompare(b.date));
+              return { ...prev, [name]: { best1rm: Math.max(cur.best1rm, oneRM), bestWeight: weight, bestReps: reps, date, history } };
+            });
+          }}
+        />
+      )}
+
+      {/* Share clipboard toast — shown when Web Share API is unavailable */}
+      {shareToast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 700, background: COLORS.blue, color: "#fff", borderRadius: 14, padding: "10px 20px", fontWeight: 700, fontSize: 14, boxShadow: "0 4px 24px #0005", display: "flex", alignItems: "center", gap: 8 }}>
+          <span>✓</span><span>Copied to clipboard!</span>
+        </div>
+      )}
+
+      {/* PR toast — appears top-center for 4 seconds after a session with new records */}
+      {prToast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 700, background: COLORS.yellow, color: "#000", borderRadius: 14, padding: "10px 20px", fontWeight: 800, fontSize: 14, boxShadow: "0 4px 24px #0005", display: "flex", alignItems: "center", gap: 8, maxWidth: "90vw" }}>
+          <span>🏆</span>
+          <span>New PR{prToast.length > 1 ? "s" : ""}! {prToast.slice(0, 2).join(", ")}{prToast.length > 2 ? ` +${prToast.length - 2}` : ""}</span>
+        </div>
+      )}
       {editingInjury && <UpdateInjuryModal injury={editingInjury} onClose={() => setEditingInjury(null)} onUpdate={inj => { setInjuries(prev => prev.map(i => i.id === inj.id ? inj : i)); setEditingInjury(null); }} />}
       {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }} />}
       {showSessionStart && todayRoutine && <SessionStartPrompt todayRoutine={todayRoutine} onClose={() => setShowSessionStart(false)} onUseRoutine={() => { setShowSessionStart(false); startActiveSession(todayRoutine.exercises, todayRoutine.name, todayRoutine.type); }} onFresh={() => { setShowSessionStart(false); startActiveSession(); }} />}

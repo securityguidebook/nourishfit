@@ -15,6 +15,7 @@ CREATE TABLE public.profiles (
   activity_level  TEXT    DEFAULT 'moderate',
   cheat_days      INTEGER DEFAULT 1,
   water_goal      INTEGER DEFAULT 2500,
+  location        TEXT,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -144,6 +145,10 @@ CREATE TABLE public.progress_photos (
 );
 ALTER TABLE public.progress_photos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "own photos" ON public.progress_photos FOR ALL USING (auth.uid() = user_id);
+
+-- ─── Migration: add location to existing profiles table ──────────────────────
+-- Run this if the profiles table already exists:
+-- ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS location TEXT;
 
 -- ─── Storage bucket for progress photos ───────────────────────────────────────
 -- Run this separately or via the Supabase dashboard:
