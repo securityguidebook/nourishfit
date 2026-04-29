@@ -3614,7 +3614,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, width: "100%", margin: "0 auto", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", overflowX: "hidden" }}>
+    <div style={{ background: COLORS.bg, minHeight: "100dvh", color: COLORS.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", maxWidth: maxW, width: "100%", margin: "0 auto", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -3628,8 +3628,9 @@ export default function App() {
         input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; font-size: 16px !important; }
       `}</style>
 
-      {/* Header — padded for iOS status bar */}
-      <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      {/* Sticky header — padded for iOS status bar */}
+      <div style={{ position: "sticky", top: 0, zIndex: 300, background: isDark ? "rgba(10,10,15,0.9)" : "rgba(242,242,247,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: `1px solid ${COLORS.border}` }}>
+      <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 12px) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
           <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, fontFamily: "'Space Mono', monospace" }}>NourishFit</div>
           {tab === "dashboard" && (
@@ -3682,11 +3683,9 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      {/* Active session banner */}
       {activeSession && !showActiveWorkout && (
         <div onClick={() => setShowActiveWorkout(true)}
-          style={{ margin: "12px 20px 0", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          style={{ margin: "0 20px 10px", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.accent }} />
             <span style={{ fontSize: 12, color: COLORS.accent, fontWeight: 700 }}>Session in progress</span>
@@ -3694,6 +3693,7 @@ export default function App() {
           <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 14, fontWeight: 800, color: COLORS.accent }}>{fmtSec(sessionElapsed)}</span>
         </div>
       )}
+      </div>
 
       {/* Tab Content */}
       <div style={{ padding: "16px 20px 0" }}>
