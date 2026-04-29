@@ -1144,7 +1144,7 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
 
   if (screen === "pre") {
     return (
-      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column", padding: 24, paddingTop: "calc(env(safe-area-inset-top, 0px) + 60px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
+      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 500, display: "flex", flexDirection: "column", padding: 24, paddingTop: "calc(env(safe-area-inset-top, 0px) + 60px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
         <button onClick={onClose} style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 16px)", left: 16, background: "none", border: "none", color: COLORS.muted, fontSize: 24, cursor: "pointer" }}>✕</button>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
           <div style={{ fontSize: 64 }}>🏃</div>
@@ -1169,7 +1169,7 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
 
   if (screen === "active") {
     return (
-      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 500, display: "flex", flexDirection: "column" }}>
         <div style={{ flex: 1, position: "relative" }}>
           {currentPos ? (
             <MapContainer center={[currentPos.lat, currentPos.lng]} zoom={16} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl={false}>
@@ -1217,7 +1217,7 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
   const weightKg = profile.weightUnit === "lbs" ? (parseFloat(profile.weight) || 70) * 0.453592 : (parseFloat(profile.weight) || 70);
   const calories = Math.round(totalDistKm * weightKg);
   return (
-    <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 500, overflowY: "auto" }}>
       <div style={{ padding: "20px 20px calc(100px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, paddingTop: "calc(env(safe-area-inset-top, 0px) + 40px)" }}>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer", padding: 0 }}>✕</button>
