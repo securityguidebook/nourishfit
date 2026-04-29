@@ -3628,8 +3628,8 @@ export default function App() {
         input, textarea, select { touch-action: manipulation; -webkit-user-select: text !important; user-select: text !important; font-size: 16px !important; }
       `}</style>
 
-      {/* Sticky header — padded for iOS status bar */}
-      <div style={{ position: "sticky", top: 0, zIndex: 300, background: isDark ? "rgba(10,10,15,0.9)" : "rgba(242,242,247,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: `1px solid ${COLORS.border}` }}>
+      {/* Fixed header — padded for iOS status bar */}
+      <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: maxW, zIndex: 300, background: isDark ? "rgba(10,10,15,0.9)" : "rgba(242,242,247,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: `1px solid ${COLORS.border}` }}>
       <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 12px) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
           <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, fontFamily: "'Space Mono', monospace" }}>NourishFit</div>
@@ -3696,7 +3696,7 @@ export default function App() {
       </div>
 
       {/* Tab Content */}
-      <div style={{ padding: "16px 20px 0" }}>
+      <div style={{ padding: "16px 20px 0", paddingTop: "calc(env(safe-area-inset-top, 0px) + 76px)" }}>
 
         {/* ── DASHBOARD ── */}
         {tab === "dashboard" && (
