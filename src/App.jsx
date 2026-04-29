@@ -695,8 +695,8 @@ function AddInjuryModal({ onClose, onAdd }) {
     onClose();
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Log Symptom</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -1144,8 +1144,8 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
 
   if (screen === "pre") {
     return (
-      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column", padding: 24, paddingTop: 60 }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 16, left: 16, background: "none", border: "none", color: COLORS.muted, fontSize: 24, cursor: "pointer" }}>✕</button>
+      <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, display: "flex", flexDirection: "column", padding: 24, paddingTop: "calc(env(safe-area-inset-top, 0px) + 60px)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 16px)", left: 16, background: "none", border: "none", color: COLORS.muted, fontSize: 24, cursor: "pointer" }}>✕</button>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
           <div style={{ fontSize: 64 }}>🏃</div>
           <h2 style={{ margin: 0, fontFamily: "'Space Mono',monospace", color: COLORS.text, fontSize: 22 }}>Track a Run</h2>
@@ -1180,11 +1180,11 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
           ) : (
             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.muted, fontSize: 13 }}>Waiting for GPS...</div>
           )}
-          <div style={{ position: "absolute", top: 12, right: 12, zIndex: 500, background: COLORS.card + "ee", borderRadius: 20, padding: "6px 12px", fontSize: 11, color: paused ? COLORS.yellow : (gpsAccuracy <= 20 ? COLORS.accent : COLORS.yellow), fontWeight: 700, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 12px)", right: 12, zIndex: 500, background: COLORS.card + "ee", borderRadius: 20, padding: "6px 12px", fontSize: 11, color: paused ? COLORS.yellow : (gpsAccuracy <= 20 ? COLORS.accent : COLORS.yellow), fontWeight: 700, border: `1px solid ${COLORS.border}` }}>
             {paused ? "⏸ Paused" : `● GPS ±${gpsAccuracy ?? "--"} m`}
           </div>
         </div>
-        <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.border}`, padding: "16px 20px 32px" }}>
+        <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.border}`, padding: "16px 20px calc(32px + env(safe-area-inset-bottom, 0px))" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 30, fontWeight: 900, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{displayDist.toFixed(2)}</div>
@@ -1218,8 +1218,8 @@ function RunTracker({ profile, onClose, onSave, hkAvailable }) {
   const calories = Math.round(totalDistKm * weightKg);
   return (
     <div style={{ position: "fixed", inset: 0, background: COLORS.bg, zIndex: 200, overflowY: "auto" }}>
-      <div style={{ padding: "20px 20px 100px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, paddingTop: 40 }}>
+      <div style={{ padding: "20px 20px calc(100px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, paddingTop: "calc(env(safe-area-inset-top, 0px) + 40px)" }}>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer", padding: 0 }}>✕</button>
           <h2 style={{ margin: 0, fontFamily: "'Space Mono',monospace", fontSize: 18, color: COLORS.text }}>Run Complete</h2>
           <div style={{ marginLeft: "auto", fontSize: 24 }}>🎉</div>
@@ -1317,8 +1317,8 @@ function LogWeightModal({ onClose, onSave, unit, lastWeight, todayStr }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "24px 24px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Weight</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
@@ -1811,7 +1811,7 @@ function FoodSearchModal({ onClose, onAdd }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px 0", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -1834,7 +1834,7 @@ function FoodSearchModal({ onClose, onAdd }) {
             />
 
             {/* Results */}
-            <div style={{ overflowY: "auto", flex: 1, paddingBottom: 24 }}>
+            <div style={{ overflowY: "auto", flex: 1, paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))" }}>
               {loading && <div style={{ textAlign: "center", padding: 24, color: COLORS.muted, fontSize: 13 }}>Searching…</div>}
               {!loading && error && <div style={{ textAlign: "center", padding: 24, color: COLORS.muted, fontSize: 13 }}>{error}</div>}
               {!loading && !error && results.length === 0 && query.trim() && (
@@ -1870,7 +1870,7 @@ function FoodSearchModal({ onClose, onAdd }) {
           </>
         ) : (
           /* Portion screen */
-          <div style={{ paddingBottom: 28 }}>
+          <div style={{ paddingBottom: "calc(28px + env(safe-area-inset-bottom, 0px))", overflowY: "auto" }}>
             <div style={{ background: COLORS.card, borderRadius: 14, padding: "14px 16px", marginBottom: 18, border: `1px solid ${COLORS.border}` }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, marginBottom: 2 }}>{selected.product.product_name}</div>
               {selected.product.brands && <div style={{ fontSize: 12, color: COLORS.muted }}>{selected.product.brands.split(",")[0]}</div>}
@@ -2740,6 +2740,362 @@ function PhotoCalendarPage({ photos, onAdd, onDelete }) {
   );
 }
 
+// ─── Insights ─────────────────────────────────────────────────────────────────
+
+function getExerciseMuscles(name) {
+  const n = (name || "").toLowerCase();
+  if (/bench\s*press|chest\s*fly|push.?up|pec\s*dec|cable\s*fly|incline.*press|decline.*press/.test(n)) return ["chest"];
+  if (/deadlift|rack\s*pull/.test(n)) return ["back", "hamstrings", "glutes"];
+  if (/squat|leg\s*press|hack\s*squat|front\s*squat/.test(n)) return ["quads", "glutes"];
+  if (/pull.?up|chin.?up|lat\s*pull|pulldown/.test(n)) return ["back", "biceps"];
+  if (/\brow\b|t.?bar|cable\s*row/.test(n)) return ["back"];
+  if (/overhead\s*press|shoulder\s*press|military|ohp|arnold/.test(n)) return ["shoulders"];
+  if (/lateral\s*raise|side\s*raise|upright\s*row|face\s*pull|rear\s*delt|reverse\s*fly/.test(n)) return ["shoulders"];
+  if (/bicep\s*curl|hammer\s*curl|preacher|ez\s*curl/.test(n)) return ["biceps"];
+  if (/tricep|skull\s*crusher|pushdown|close\s*grip/.test(n)) return ["triceps"];
+  if (/\bdip\b/.test(n)) return ["triceps", "chest"];
+  if (/lunge|step.?up|leg\s*extension/.test(n)) return ["quads"];
+  if (/leg\s*curl|rdl|romanian|nordic|good\s*morning/.test(n)) return ["hamstrings"];
+  if (/calf\s*raise/.test(n)) return ["calves"];
+  if (/plank|crunch|sit.?up|russian\s*twist|leg\s*raise|v.?up/.test(n)) return ["core"];
+  if (/hip\s*thrust|glute\s*bridge|kickback/.test(n)) return ["glutes"];
+  if (/run|sprint|bike|cycling|treadmill|cardio/.test(n)) return ["cardio"];
+  return [];
+}
+
+function getMuscleFrequencies(workouts, days) {
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const counts = {};
+  workouts.filter(w => w.id > cutoff).forEach(w => {
+    const seen = new Set();
+    (w.exercises || []).forEach(ex => {
+      getExerciseMuscles(ex.name || "").forEach(m => {
+        if (!seen.has(m)) { counts[m] = (counts[m] || 0) + 1; seen.add(m); }
+      });
+    });
+  });
+  return counts;
+}
+
+function BodyFigure({ view, freq }) {
+  const mf = m => {
+    const n = freq[m] || 0;
+    if (n === 0) return "transparent";
+    if (n <= 2) return COLORS.accentDim;
+    if (n <= 5) return COLORS.accentMid;
+    return COLORS.accent;
+  };
+  const s = { stroke: COLORS.border, strokeWidth: "1.2", strokeLinejoin: "round" };
+  if (view === "front") return (
+    <svg viewBox="0 0 60 148" style={{ width: "100%", height: "100%" }}>
+      <circle cx="30" cy="10" r="9" fill={COLORS.surface} stroke={COLORS.border} strokeWidth="1.2" />
+      <rect x="27" y="19" width="6" height="5" rx="2" fill={COLORS.surface} stroke={COLORS.border} strokeWidth="1" />
+      <ellipse cx="12" cy="28" rx="7" ry="5" fill={mf("shoulders")} {...s} />
+      <ellipse cx="48" cy="28" rx="7" ry="5" fill={mf("shoulders")} {...s} />
+      <path d="M 20,24 Q 20,43 30,44 Q 40,43 40,24 Z" fill={mf("chest")} {...s} />
+      <rect x="6" y="28" width="8" height="20" rx="4" fill={mf("biceps")} {...s} />
+      <rect x="46" y="28" width="8" height="20" rx="4" fill={mf("biceps")} {...s} />
+      <rect x="22" y="44" width="16" height="20" rx="4" fill={mf("core")} {...s} />
+      <rect x="20" y="64" width="20" height="9" rx="4" fill={COLORS.surface} stroke={COLORS.border} strokeWidth="1" />
+      <rect x="19" y="73" width="11" height="38" rx="5" fill={mf("quads")} {...s} />
+      <rect x="30" y="73" width="11" height="38" rx="5" fill={mf("quads")} {...s} />
+      <rect x="19" y="114" width="10" height="27" rx="5" fill={mf("calves")} {...s} />
+      <rect x="31" y="114" width="10" height="27" rx="5" fill={mf("calves")} {...s} />
+    </svg>
+  );
+  return (
+    <svg viewBox="0 0 60 148" style={{ width: "100%", height: "100%" }}>
+      <circle cx="30" cy="10" r="9" fill={COLORS.surface} stroke={COLORS.border} strokeWidth="1.2" />
+      <path d="M 27,19 L 12,26 L 15,33 L 30,27 L 45,33 L 48,26 L 33,19 Z" fill={mf("traps")} {...s} />
+      <ellipse cx="10" cy="29" rx="6" ry="5" fill={mf("shoulders")} {...s} />
+      <ellipse cx="50" cy="29" rx="6" ry="5" fill={mf("shoulders")} {...s} />
+      <rect x="10" y="32" width="8" height="32" rx="4" fill={mf("back")} {...s} />
+      <rect x="42" y="32" width="8" height="32" rx="4" fill={mf("back")} {...s} />
+      <rect x="22" y="32" width="16" height="22" rx="4" fill={mf("back")} {...s} />
+      <rect x="6" y="29" width="7" height="20" rx="4" fill={mf("triceps")} {...s} />
+      <rect x="47" y="29" width="7" height="20" rx="4" fill={mf("triceps")} {...s} />
+      <rect x="23" y="54" width="14" height="14" rx="4" fill={mf("core")} {...s} />
+      <rect x="19" y="70" width="10" height="22" rx="5" fill={mf("glutes")} {...s} />
+      <rect x="31" y="70" width="10" height="22" rx="5" fill={mf("glutes")} {...s} />
+      <rect x="19" y="94" width="11" height="32" rx="5" fill={mf("hamstrings")} {...s} />
+      <rect x="30" y="94" width="11" height="32" rx="5" fill={mf("hamstrings")} {...s} />
+      <rect x="19" y="129" width="10" height="16" rx="4" fill={mf("calves")} {...s} />
+      <rect x="31" y="129" width="10" height="16" rx="4" fill={mf("calves")} {...s} />
+    </svg>
+  );
+}
+
+function InsightsSummaryCard({ workouts, meals, waterLog, waterGoal, sleepLog, supplements, calorieGoal, period }) {
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const ldk = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const dateRange = Array.from({ length: days }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (days-1-i)); return ldk(d); });
+  const pw = workouts.filter(w => w.id > cutoff);
+  const sessions = pw.length;
+  const totalMin = pw.reduce((s, w) => s + (w.duration || 0), 0);
+  const totalBurned = pw.reduce((s, w) => s + (w.calories || 0), 0);
+  const activeDay = period === "7d" ? dateRange.map(k => pw.some(w => ldk(new Date(w.id)) === k)) : null;
+  const calsByDay = Object.fromEntries(dateRange.map(k => [k, 0]));
+  meals.forEach(m => { if (calsByDay[m.logged_date] !== undefined) calsByDay[m.logged_date] += m.calories || 0; });
+  const daysLogged = dateRange.filter(k => calsByDay[k] > 0).length;
+  const avgCals = daysLogged > 0 ? Math.round(dateRange.reduce((s, k) => s + calsByDay[k], 0) / daysLogged) : 0;
+  const daysWaterMet = dateRange.filter(k => (waterLog[k] || 0) >= waterGoal).length;
+  const sleepEntries = dateRange.map(k => sleepLog[k]).filter(Boolean);
+  const avgSleep = sleepEntries.length > 0 ? (sleepEntries.reduce((s, e) => s + parseFloat(e.hours || 0), 0) / sleepEntries.length).toFixed(1) : null;
+  const suppAdherence = supplements.length > 0 ? Math.round(supplements.reduce((s, supp) => s + dateRange.filter(k => supp.history?.[k]).length, 0) / (supplements.length * days) * 100) : null;
+  const cell = (value, unit, color) => (
+    <div style={{ background: COLORS.bg, borderRadius: 10, padding: "10px 6px", textAlign: "center" }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color, fontFamily: "'Space Mono',monospace", lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 9, color: COLORS.muted, marginTop: 2 }}>{unit}</div>
+    </div>
+  );
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, marginBottom: 14, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+      <div style={{ padding: "13px 16px 0" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          {period === "7d" ? "This Week" : period === "30d" ? "Last 30 Days" : "Last 90 Days"}
+        </span>
+      </div>
+      <div style={{ padding: "10px 14px 14px" }}>
+        {activeDay && (
+          <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
+            {dateRange.map((k, i) => {
+              const letter = new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" })[0];
+              return (
+                <div key={k} style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ height: 6, borderRadius: 3, background: activeDay[i] ? COLORS.accent : COLORS.border, marginBottom: 3 }} />
+                  <span style={{ fontSize: 9, color: activeDay[i] ? COLORS.accent : COLORS.muted, fontWeight: activeDay[i] ? 700 : 400 }}>{letter}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6, marginBottom: 8 }}>
+          {cell(sessions, "sessions", COLORS.accent)}
+          {cell(totalMin, "min active", COLORS.blue)}
+          {cell(totalBurned, "kcal burned", COLORS.orange)}
+        </div>
+        {daysLogged > 0 && (
+          <div style={{ background: COLORS.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 2 }}>Avg daily calories</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.yellow, fontFamily: "'Space Mono',monospace" }}>
+                {avgCals} <span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 400 }}>/ {calorieGoal}</span>
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 2 }}>Days logged</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.text }}>{daysLogged}<span style={{ fontSize: 10, color: COLORS.muted, fontWeight: 400 }}>/{days}</span></div>
+            </div>
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${suppAdherence !== null ? 3 : 2}, 1fr)`, gap: 6 }}>
+          {cell(avgSleep !== null ? `${avgSleep}h` : "—", "avg sleep", COLORS.purple)}
+          {cell(`${daysWaterMet}/${days}`, "water goal met", COLORS.blue)}
+          {suppAdherence !== null && cell(`${suppAdherence}%`, "supp adherence", COLORS.accent)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BodyWeightInsightCard({ weightLog, profile, onLogWeight, period }) {
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+  const allEntries = Object.entries(weightLog).sort(([a],[b]) => a.localeCompare(b)).map(([date,w]) => ({ date, w }));
+  const entries = allEntries.filter(e => e.date >= cutoffStr);
+  const latest = allEntries[allEntries.length - 1];
+  const prev = allEntries[allEntries.length - 2];
+  const delta = latest && prev ? Math.round((latest.w - prev.w) * 10) / 10 : null;
+  const unit = profile.weightUnit || "kg";
+  const periodDelta = entries.length >= 2 ? Math.round((entries[entries.length-1].w - entries[0].w) * 10) / 10 : null;
+  const W = 300, H = 90, PAD = 6;
+  const weights = entries.map(e => e.w);
+  const minW = weights.length >= 2 ? Math.min(...weights) : 0;
+  const maxW = weights.length >= 2 ? Math.max(...weights) : 1;
+  const range = maxW - minW || 0.5;
+  const toX = i => PAD + (i / (entries.length - 1)) * (W - PAD * 2);
+  const toY = w => H - PAD - ((w - minW) / range) * (H - PAD * 2);
+  const trendColor = delta !== null && delta <= 0 ? COLORS.accent : COLORS.warn;
+  const linePts = entries.length >= 2 ? entries.map((e, i) => `${toX(i).toFixed(1)},${toY(e.w).toFixed(1)}`).join(" ") : "";
+  const fillPts = entries.length >= 2 ? `${toX(0).toFixed(1)},${H} ${linePts} ${toX(entries.length-1).toFixed(1)},${H}` : "";
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, padding: "14px 16px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Body Weight</div>
+          {latest ? (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+              <span style={{ fontSize: 30, fontWeight: 800, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{latest.w}</span>
+              <span style={{ fontSize: 13, color: COLORS.muted }}>{unit}</span>
+              {delta !== null && <span style={{ fontSize: 13, fontWeight: 700, color: trendColor }}>{delta > 0 ? "+" : ""}{delta}</span>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>Not logged yet</div>
+          )}
+          {periodDelta !== null && (
+            <div style={{ fontSize: 11, color: periodDelta <= 0 ? COLORS.accent : COLORS.warn, marginTop: 2 }}>
+              {periodDelta > 0 ? "+" : ""}{periodDelta} {unit} over {days} days
+            </div>
+          )}
+        </div>
+        <button onClick={onLogWeight} style={{ padding: "7px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>+ Log</button>
+      </div>
+      {entries.length >= 2 ? (
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible" }} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="wfill2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={trendColor} stopOpacity="0.25" />
+              <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={fillPts} fill="url(#wfill2)" />
+          <polyline points={linePts} fill="none" stroke={trendColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={toX(0)} cy={toY(weights[0])} r="4" fill={trendColor} />
+          <circle cx={toX(entries.length-1)} cy={toY(weights[weights.length-1])} r="4" fill={trendColor} />
+        </svg>
+      ) : entries.length === 1 ? (
+        <div style={{ fontSize: 11, color: COLORS.muted, textAlign: "center", paddingTop: 8 }}>Log one more entry to see your trend</div>
+      ) : (
+        <div style={{ fontSize: 11, color: COLORS.muted, textAlign: "center", paddingTop: 8 }}>No entries in this period</div>
+      )}
+    </div>
+  );
+}
+
+function MuscleHeatmapCard({ workouts, period }) {
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  const freq = getMuscleFrequencies(workouts, days);
+  const muscles = [
+    { key: "chest", label: "Chest" }, { key: "back", label: "Back" },
+    { key: "shoulders", label: "Shoulders" }, { key: "biceps", label: "Biceps" },
+    { key: "triceps", label: "Triceps" }, { key: "core", label: "Core" },
+    { key: "quads", label: "Quads" }, { key: "hamstrings", label: "Hamstrings" },
+    { key: "glutes", label: "Glutes" }, { key: "calves", label: "Calves" },
+  ];
+  const mfColor = n => !n ? COLORS.border : n <= 2 ? COLORS.accentDim : n <= 5 ? COLORS.accentMid : COLORS.accent;
+  const maxFreq = Math.max(...Object.values(freq).filter((_, k) => !["cardio","other"].includes(k)), 1);
+  const trained = muscles.filter(m => freq[m.key] > 0);
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, padding: "14px 16px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Muscles Trained</div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+        <div style={{ flex: 1, textAlign: "center" }}>
+          <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 6, fontWeight: 600, letterSpacing: "0.08em" }}>FRONT</div>
+          <div style={{ height: 148 }}><BodyFigure view="front" freq={freq} /></div>
+        </div>
+        <div style={{ flex: 1, textAlign: "center" }}>
+          <div style={{ fontSize: 9, color: COLORS.muted, marginBottom: 6, fontWeight: 600, letterSpacing: "0.08em" }}>BACK</div>
+          <div style={{ height: 148 }}><BodyFigure view="back" freq={freq} /></div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+        <span style={{ fontSize: 9, color: COLORS.muted }}>None</span>
+        {[COLORS.border, COLORS.accentDim, COLORS.accentMid, COLORS.accent].map((c, i) => (
+          <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: c }} />
+        ))}
+        <span style={{ fontSize: 9, color: COLORS.muted }}>High</span>
+      </div>
+      {trained.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {trained.map(m => (
+            <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 72, fontSize: 11, color: COLORS.mutedLight, fontWeight: 600 }}>{m.label}</div>
+              <div style={{ flex: 1, height: 6, background: COLORS.border, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, (freq[m.key] / maxFreq) * 100)}%`, height: "100%", background: mfColor(freq[m.key]), borderRadius: 3 }} />
+              </div>
+              <div style={{ width: 24, fontSize: 11, color: mfColor(freq[m.key]), fontFamily: "'Space Mono',monospace", fontWeight: 700, textAlign: "right" }}>{freq[m.key]}x</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", padding: "8px 0" }}>No logged exercises in this period</div>
+      )}
+    </div>
+  );
+}
+
+function WorkoutVolumeCard({ workouts, period }) {
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const pw = workouts.filter(w => w.id > cutoff);
+  const buckets = {};
+  pw.forEach(w => {
+    const d = new Date(w.id); const day = d.getDay() || 7;
+    const mon = new Date(d); mon.setDate(d.getDate() - day + 1);
+    const key = mon.toISOString().slice(0, 10);
+    const label = mon.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (!buckets[key]) buckets[key] = { label, sessions: 0, volume: 0 };
+    buckets[key].sessions++;
+    buckets[key].volume += (w.exercises || []).reduce((t, ex) => t + (ex.sets || []).reduce((s, set) => s + (parseFloat(set.weight) || 0) * (parseInt(set.reps) || 0), 0), 0);
+  });
+  const pts = Object.entries(buckets).sort(([a],[b]) => a.localeCompare(b)).map(([,v]) => v);
+  const hasVolume = pts.some(p => p.volume > 0);
+  const vals = pts.map(p => hasVolume ? p.volume : p.sessions);
+  const maxVal = Math.max(...vals, 1);
+  const W = 300, H = 80, PAD = 6;
+  const toX = i => PAD + (i / Math.max(pts.length - 1, 1)) * (W - PAD * 2);
+  const toY = v => H - PAD - (v / maxVal) * (H - PAD * 2);
+  const linePts = vals.length >= 2 ? vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ") : "";
+  const fillPts = vals.length >= 2 ? `${toX(0).toFixed(1)},${H} ${linePts} ${toX(vals.length-1).toFixed(1)},${H}` : "";
+  const fmtVol = v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(Math.round(v));
+  return (
+    <div style={{ background: COLORS.card, borderRadius: 16, padding: "14px 16px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          {hasVolume ? "Training Volume" : "Workout Sessions"}
+        </div>
+        {vals.length > 0 && (
+          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 13, fontWeight: 700, color: COLORS.blue }}>
+            {hasVolume ? `${fmtVol(vals.reduce((a,b) => a+b, 0))} kg·reps` : `${vals.reduce((a,b) => a+b, 0)} sessions`}
+          </div>
+        )}
+      </div>
+      {vals.length >= 2 ? (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H, display: "block", overflow: "visible" }} preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="volfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COLORS.blue} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={COLORS.blue} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <polygon points={fillPts} fill="url(#volfill)" />
+            <polyline points={linePts} fill="none" stroke={COLORS.blue} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {vals.map((v, i) => <circle key={i} cx={toX(i)} cy={toY(v)} r="3" fill={COLORS.blue} />)}
+          </svg>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+            {pts.map((p, i) => <span key={i} style={{ fontSize: 9, color: COLORS.muted }}>{p.label}</span>)}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", padding: "12px 0" }}>
+          {pw.length === 0 ? "No workouts in this period" : "Log more workouts to see your volume trend"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InsightsView({ workouts, meals, waterLog, waterGoal, sleepLog, supplements, calorieGoal, weightLog, profile, onLogWeight, period, onPeriodChange }) {
+  return (
+    <div>
+      <div style={{ display: "flex", background: COLORS.card, borderRadius: 12, padding: 4, marginBottom: 16 }}>
+        {["7d", "30d", "90d"].map(p => (
+          <button key={p} onClick={() => onPeriodChange(p)} style={{ flex: 1, padding: "8px 0", borderRadius: 9, background: period === p ? COLORS.accent : "transparent", color: period === p ? "#000" : COLORS.muted, fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer", transition: "all 0.2s" }}>
+            {p}
+          </button>
+        ))}
+      </div>
+      <InsightsSummaryCard workouts={workouts} meals={meals} waterLog={waterLog} waterGoal={waterGoal} sleepLog={sleepLog} supplements={supplements} calorieGoal={calorieGoal} period={period} />
+      <BodyWeightInsightCard weightLog={weightLog} profile={profile} onLogWeight={onLogWeight} period={period} />
+      <MuscleHeatmapCard workouts={workouts} period={period} />
+      <WorkoutVolumeCard workouts={workouts} period={period} />
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -2853,6 +3209,8 @@ export default function App() {
   );
 
   const [tab, setTab] = useState("dashboard");
+  const [progressSubTab, setProgressSubTab] = useState("photos");
+  const [insightsPeriod, setInsightsPeriod] = useState("30d");
   const [nutritionView, setNutritionView] = useState("today");
   const [lastTrackTab, setLastTrackTab] = useState(() => localStorage.getItem("nf_last_track") || "nutrition");
   const [lastWellbeingTab, setLastWellbeingTab] = useState(() => localStorage.getItem("nf_last_wellbeing") || "health");
@@ -3359,17 +3717,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Week in Review */}
-            <WeeklySummaryCard
-              meals={meals}
-              workouts={workouts}
-              waterLog={waterLog}
-              waterGoal={waterGoal}
-              sleepLog={sleepLog}
-              supplements={supplements}
-              calorieGoal={calorieGoal}
-            />
-
             {/* Apple Health row — only rendered when HealthKit is available (native iOS build) */}
             {hkAvailable && (
               <div style={{ background: COLORS.card, borderRadius: 14, padding: "12px 14px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
@@ -3407,58 +3754,6 @@ export default function App() {
                 )}
               </div>
             )}
-
-            {/* Weight log card */}
-            {(() => {
-              const allEntries = Object.entries(weightLog)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([date, w]) => ({ date, w }));
-              const last30 = allEntries.slice(-30);
-              const latest = allEntries[allEntries.length - 1];
-              const prev   = allEntries[allEntries.length - 2];
-              const delta  = latest && prev ? Math.round((latest.w - prev.w) * 10) / 10 : null;
-              const unit   = profile.weightUnit || "kg";
-              return (
-                <div style={{ background: COLORS.card, borderRadius: 14, padding: "14px 16px", marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: last30.length >= 2 ? 10 : 0 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Body Weight</div>
-                      {latest ? (
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 3 }}>
-                          <span style={{ fontSize: 26, fontWeight: 800, color: COLORS.text, fontFamily: "'Space Mono',monospace" }}>{latest.w}</span>
-                          <span style={{ fontSize: 13, color: COLORS.muted }}>{unit}</span>
-                          {delta !== null && (
-                            <span style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? COLORS.accent : COLORS.warn }}>
-                              {delta > 0 ? "+" : ""}{delta}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>Not logged yet</div>
-                      )}
-                      {last30.length >= 2 && (() => {
-                        const first = last30[0].w, last = last30[last30.length - 1].w;
-                        const totalDelta = Math.round((last - first) * 10) / 10;
-                        return (
-                          <div style={{ fontSize: 11, color: totalDelta <= 0 ? COLORS.accent : COLORS.warn, marginTop: 2 }}>
-                            {totalDelta > 0 ? "+" : ""}{totalDelta} {unit} over {last30.length} entries
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <button onClick={() => setShowWeightModal(true)}
-                      style={{ padding: "7px 14px", background: COLORS.accent, color: "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
-                      + Log
-                    </button>
-                  </div>
-                  {last30.length >= 2 ? (
-                    <WeightMiniChart entries={last30} />
-                  ) : last30.length === 1 ? (
-                    <div style={{ fontSize: 11, color: COLORS.muted, textAlign: "center", paddingTop: 8 }}>Log one more entry to see your trend</div>
-                  ) : null}
-                </div>
-              );
-            })()}
 
             {/* Today's Routine */}
             {todayRoutine && (() => {
@@ -4357,13 +4652,40 @@ export default function App() {
           </div>
         )}
 
-        {/* ── PROGRESS PHOTOS ── */}
+        {/* ── PROGRESS ── */}
         {tab === "progress" && (
-          <PhotoCalendarPage
-            photos={progressPhotos}
-            onAdd={meta => setProgressPhotos(prev => [meta, ...prev])}
-            onDelete={id => { deletePhoto(id); setProgressPhotos(prev => prev.filter(p => p.id !== id)); }}
-          />
+          <div>
+            <div style={{ display: "flex", background: COLORS.card, borderRadius: 12, padding: 4, marginBottom: 16 }}>
+              {[{ id: "photos", label: "Photos" }, { id: "insights", label: "Insights" }].map(t => (
+                <button key={t.id} onClick={() => setProgressSubTab(t.id)} style={{ flex: 1, padding: "8px 0", borderRadius: 9, background: progressSubTab === t.id ? COLORS.accent : "transparent", color: progressSubTab === t.id ? "#000" : COLORS.muted, fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", transition: "all 0.2s" }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {progressSubTab === "photos" && (
+              <PhotoCalendarPage
+                photos={progressPhotos}
+                onAdd={meta => setProgressPhotos(prev => [meta, ...prev])}
+                onDelete={id => { deletePhoto(id); setProgressPhotos(prev => prev.filter(p => p.id !== id)); }}
+              />
+            )}
+            {progressSubTab === "insights" && (
+              <InsightsView
+                workouts={workouts}
+                meals={meals}
+                waterLog={waterLog}
+                waterGoal={waterGoal}
+                sleepLog={sleepLog}
+                supplements={supplements}
+                calorieGoal={calorieGoal}
+                weightLog={weightLog}
+                profile={profile}
+                onLogWeight={() => setShowWeightModal(true)}
+                period={insightsPeriod}
+                onPeriodChange={setInsightsPeriod}
+              />
+            )}
+          </div>
         )}
 
         {/* ── PROFILE ── */}
