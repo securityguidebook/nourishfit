@@ -146,9 +146,33 @@ CREATE TABLE public.progress_photos (
 ALTER TABLE public.progress_photos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "own photos" ON public.progress_photos FOR ALL USING (auth.uid() = user_id);
 
+-- ─── Weight Log ──────────────────────────────────────────────────────────────
+CREATE TABLE public.weight_log (
+  user_id     UUID        REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  date        DATE        NOT NULL,
+  weight      DECIMAL     NOT NULL,
+  PRIMARY KEY (user_id, date)
+);
+ALTER TABLE public.weight_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "own weight" ON public.weight_log FOR ALL USING (auth.uid() = user_id);
+
 -- ─── Migration: add location to existing profiles table ──────────────────────
 -- Run this if the profiles table already exists:
 -- ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS location TEXT;
+
+-- ─── Migration: Workout Routines Feature ─────────────────────────────────────
+-- Run these in Supabase SQL Editor if the routines table already exists:
+-- ALTER TABLE public.routines ADD COLUMN IF NOT EXISTS saved_routines JSONB DEFAULT '[]';
+-- ALTER TABLE public.routines ADD COLUMN IF NOT EXISTS prs JSONB DEFAULT '{}';
+
+-- ─── Migration: Weight Log (new table for existing DBs) ──────────────────────
+-- Run this in Supabase SQL Editor if the DB already exists:
+-- CREATE TABLE IF NOT EXISTS public.weight_log (
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+--   date DATE NOT NULL, weight DECIMAL NOT NULL, PRIMARY KEY (user_id, date)
+-- );
+-- ALTER TABLE public.weight_log ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "own weight" ON public.weight_log FOR ALL USING (auth.uid() = user_id);
 
 -- ─── Storage bucket for progress photos ───────────────────────────────────────
 -- Run this separately or via the Supabase dashboard:

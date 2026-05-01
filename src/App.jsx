@@ -662,9 +662,13 @@ function PRSparkline({ history }) {
 
 function AddPRModal({ onClose, onSave, todayStr }) {
   const [form, setForm] = useState({ name: "", weight: "", reps: "1", date: todayStr });
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "9px 12px", color: COLORS.text, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
   const oneRM = epley1RM(form.weight, form.reps);
   const valid = form.name.trim() && parseFloat(form.weight) > 0 && parseInt(form.reps) > 0;
+  const suggestions = form.name.trim().length > 0
+    ? EXERCISE_LIBRARY.filter(e => e.name.toLowerCase().includes(form.name.toLowerCase())).slice(0, 6)
+    : [];
   const handle = () => {
     if (!valid) return;
     onSave(form.name.trim(), parseFloat(form.weight), parseInt(form.reps), form.date, oneRM);
@@ -678,7 +682,21 @@ function AddPRModal({ onClose, onSave, todayStr }) {
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
         </div>
         <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Exercise Name</label>
-        <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Squat, Bench Press, Pull-ups" style={{ ...inputStyle, marginBottom: 14 }} autoFocus />
+        <div style={{ position: "relative", marginBottom: 14 }}>
+          <input value={form.name} onChange={e => { setForm(p => ({ ...p, name: e.target.value })); setShowSuggestions(true); }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            placeholder="e.g. Bench Press, Squat, Pull-Up" style={inputStyle} autoFocus />
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, zIndex: 600, overflow: "hidden", boxShadow: "0 4px 16px #0004" }}>
+              {suggestions.map(ex => (
+                <button key={ex.id} onMouseDown={() => { setForm(p => ({ ...p, name: ex.name })); setShowSuggestions(false); }}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", background: "none", border: "none", color: COLORS.text, fontSize: 13, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
+                  {ex.name} <span style={{ fontSize: 11, color: COLORS.muted }}>· {ex.category}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Weight (kg)</label>
@@ -884,7 +902,917 @@ function UpdateInjuryModal({ injury, onClose, onUpdate }) {
 const ROUTINE_TYPES = ["Strength","Cardio","HIIT","Mobility","Sport","Rest","Other"];
 const ROUTINE_TYPE_COLOR = { Strength: COLORS.accent, Cardio: COLORS.blue, HIIT: COLORS.warn, Mobility: COLORS.yellow, Sport: COLORS.purple, Rest: COLORS.muted, Other: COLORS.mutedLight };
 
-function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTemplate, onClose, onSave }) {
+const LEVEL_COLOR = { Beginner: COLORS.accent, Intermediate: COLORS.blue, Advanced: COLORS.purple };
+const EQUIP_LABEL = { none: "No Equipment", minimal: "Minimal", full: "Full Gym" };
+const EQUIP_COLOR  = { none: COLORS.accent, minimal: COLORS.yellow, full: COLORS.orange };
+
+// ─── Exercise Library ─────────────────────────────────────────────────────────
+
+const EXERCISE_LIBRARY = [
+  // Chest
+  { id: "push-up", name: "Push-Up", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["triceps","shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "wide-push-up", name: "Wide Push-Up", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "diamond-push-up", name: "Diamond Push-Up", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["triceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "8", defaultWeight: "" },
+  { id: "pike-push-up", name: "Pike Push-Up", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "8", defaultWeight: "" },
+  { id: "bench-press", name: "Bench Press", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["triceps","shoulders"], equipment: "full", movementType: "compound", defaultSets: 4, defaultReps: "8", defaultWeight: "60" },
+  { id: "incline-dumbbell-press", name: "Incline Dumbbell Press", category: "Chest", muscleGroup: "chest", secondaryMuscles: ["shoulders","triceps"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "20" },
+  { id: "cable-fly", name: "Cable Fly", category: "Chest", muscleGroup: "chest", secondaryMuscles: [], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "15" },
+  { id: "dumbbell-fly", name: "Dumbbell Fly", category: "Chest", muscleGroup: "chest", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "12" },
+  // Back
+  { id: "pull-up", name: "Pull-Up", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "6", defaultWeight: "" },
+  { id: "chin-up", name: "Chin-Up", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "6", defaultWeight: "" },
+  { id: "inverted-row", name: "Inverted Row", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "dumbbell-row", name: "Dumbbell Row", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "20" },
+  { id: "barbell-row", name: "Barbell Row", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps","core"], equipment: "full", movementType: "compound", defaultSets: 4, defaultReps: "8", defaultWeight: "60" },
+  { id: "lat-pulldown", name: "Lat Pulldown", category: "Back", muscleGroup: "back", secondaryMuscles: ["biceps"], equipment: "full", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "50" },
+  { id: "face-pull", name: "Face Pull", category: "Back", muscleGroup: "back", secondaryMuscles: ["shoulders"], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "15", defaultWeight: "20" },
+  { id: "deadlift", name: "Deadlift", category: "Back", muscleGroup: "back", secondaryMuscles: ["legs","core"], equipment: "full", movementType: "compound", defaultSets: 4, defaultReps: "5", defaultWeight: "80" },
+  { id: "romanian-deadlift", name: "Romanian Deadlift", category: "Back", muscleGroup: "back", secondaryMuscles: ["hamstrings","glutes"], equipment: "full", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "60" },
+  // Shoulders
+  { id: "overhead-press", name: "Overhead Press", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: ["triceps"], equipment: "full", movementType: "compound", defaultSets: 4, defaultReps: "8", defaultWeight: "40" },
+  { id: "dumbbell-shoulder-press", name: "Dumbbell Shoulder Press", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: ["triceps"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "16" },
+  { id: "lateral-raise", name: "Lateral Raise", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "8" },
+  { id: "front-raise", name: "Front Raise", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "8" },
+  { id: "arnold-press", name: "Arnold Press", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: ["triceps"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "12" },
+  { id: "handstand-push-up", name: "Handstand Push-Up", category: "Shoulders", muscleGroup: "shoulders", secondaryMuscles: ["triceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "5", defaultWeight: "" },
+  // Arms
+  { id: "tricep-dips", name: "Tricep Dips", category: "Arms", muscleGroup: "triceps", secondaryMuscles: ["chest","shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "12", defaultWeight: "" },
+  { id: "skull-crusher", name: "Skull Crusher", category: "Arms", muscleGroup: "triceps", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "20" },
+  { id: "tricep-overhead-extension", name: "Tricep Overhead Extension", category: "Arms", muscleGroup: "triceps", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "16" },
+  { id: "bicep-curl", name: "Bicep Curl", category: "Arms", muscleGroup: "biceps", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "12" },
+  { id: "hammer-curl", name: "Hammer Curl", category: "Arms", muscleGroup: "biceps", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "12" },
+  { id: "concentration-curl", name: "Concentration Curl", category: "Arms", muscleGroup: "biceps", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "10" },
+  { id: "cable-tricep-pushdown", name: "Cable Tricep Pushdown", category: "Arms", muscleGroup: "triceps", secondaryMuscles: [], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "25" },
+  { id: "preacher-curl", name: "Preacher Curl", category: "Arms", muscleGroup: "biceps", secondaryMuscles: [], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "10", defaultWeight: "20" },
+  // Core
+  { id: "plank", name: "Plank", category: "Core", muscleGroup: "core", secondaryMuscles: ["shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "30s", defaultWeight: "" },
+  { id: "side-plank", name: "Side Plank", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "20s", defaultWeight: "" },
+  { id: "hollow-body-hold", name: "Hollow Body Hold", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "20s", defaultWeight: "" },
+  { id: "l-sit-hold", name: "L-Sit Hold", category: "Core", muscleGroup: "core", secondaryMuscles: ["triceps"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10s", defaultWeight: "" },
+  { id: "crunch", name: "Crunch", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "20", defaultWeight: "" },
+  { id: "leg-raise", name: "Leg Raise", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  { id: "mountain-climber", name: "Mountain Climber", category: "Core", muscleGroup: "core", secondaryMuscles: ["shoulders"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "20", defaultWeight: "" },
+  { id: "ab-wheel-rollout", name: "Ab Wheel Rollout", category: "Core", muscleGroup: "core", secondaryMuscles: ["shoulders","back"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "russian-twist", name: "Russian Twist", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "20", defaultWeight: "" },
+  { id: "dead-bug", name: "Dead Bug", category: "Core", muscleGroup: "core", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  // Legs
+  { id: "bodyweight-squat", name: "Bodyweight Squat", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","hamstrings"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  { id: "jump-squat", name: "Jump Squat", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","calves"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "12", defaultWeight: "" },
+  { id: "lunge", name: "Lunge", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","hamstrings"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "bulgarian-split-squat", name: "Bulgarian Split Squat", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","hamstrings"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "8", defaultWeight: "" },
+  { id: "glute-bridge", name: "Glute Bridge", category: "Legs", muscleGroup: "glutes", secondaryMuscles: ["hamstrings"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  { id: "hip-thrust", name: "Hip Thrust", category: "Legs", muscleGroup: "glutes", secondaryMuscles: ["hamstrings"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "12", defaultWeight: "40" },
+  { id: "barbell-squat", name: "Barbell Squat", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","hamstrings","core"], equipment: "full", movementType: "compound", defaultSets: 4, defaultReps: "8", defaultWeight: "80" },
+  { id: "leg-press", name: "Leg Press", category: "Legs", muscleGroup: "quads", secondaryMuscles: ["glutes","hamstrings"], equipment: "full", movementType: "compound", defaultSets: 3, defaultReps: "12", defaultWeight: "100" },
+  { id: "leg-curl", name: "Leg Curl", category: "Legs", muscleGroup: "hamstrings", secondaryMuscles: [], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "40" },
+  { id: "leg-extension", name: "Leg Extension", category: "Legs", muscleGroup: "quads", secondaryMuscles: [], equipment: "full", movementType: "isolation", defaultSets: 3, defaultReps: "12", defaultWeight: "40" },
+  { id: "calf-raise", name: "Calf Raise", category: "Legs", muscleGroup: "calves", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 4, defaultReps: "20", defaultWeight: "" },
+  // Glutes
+  { id: "donkey-kick", name: "Donkey Kick", category: "Glutes", muscleGroup: "glutes", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  { id: "fire-hydrant", name: "Fire Hydrant", category: "Glutes", muscleGroup: "glutes", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  { id: "sumo-squat", name: "Sumo Squat", category: "Glutes", muscleGroup: "glutes", secondaryMuscles: ["quads","adductors"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "15", defaultWeight: "" },
+  // Cardio
+  { id: "burpee", name: "Burpee", category: "Cardio", muscleGroup: "full body", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "high-knees", name: "High Knees", category: "Cardio", muscleGroup: "legs", secondaryMuscles: ["core"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "30s", defaultWeight: "" },
+  { id: "jump-rope", name: "Jump Rope", category: "Cardio", muscleGroup: "calves", secondaryMuscles: ["shoulders"], equipment: "minimal", movementType: "compound", defaultSets: 3, defaultReps: "60s", defaultWeight: "" },
+  { id: "box-jump", name: "Box Jump", category: "Cardio", muscleGroup: "legs", secondaryMuscles: ["glutes"], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "10", defaultWeight: "" },
+  { id: "jumping-jack", name: "Jumping Jack", category: "Cardio", muscleGroup: "full body", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 3, defaultReps: "30s", defaultWeight: "" },
+  { id: "sprint", name: "Sprint", category: "Cardio", muscleGroup: "legs", secondaryMuscles: ["core"], equipment: "none", movementType: "compound", defaultSets: 6, defaultReps: "30s", defaultWeight: "" },
+  { id: "rowing-machine", name: "Rowing Machine", category: "Cardio", muscleGroup: "back", secondaryMuscles: ["legs","arms"], equipment: "full", movementType: "compound", defaultSets: 3, defaultReps: "500m", defaultWeight: "" },
+  { id: "stationary-bike", name: "Stationary Bike", category: "Cardio", muscleGroup: "legs", secondaryMuscles: ["core"], equipment: "full", movementType: "compound", defaultSets: 1, defaultReps: "20min", defaultWeight: "" },
+  // Mobility
+  { id: "hip-flexor-stretch", name: "Hip Flexor Stretch", category: "Mobility", muscleGroup: "hip flexors", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 2, defaultReps: "30s", defaultWeight: "" },
+  { id: "pigeon-pose", name: "Pigeon Pose", category: "Mobility", muscleGroup: "glutes", secondaryMuscles: ["hip flexors"], equipment: "none", movementType: "isolation", defaultSets: 2, defaultReps: "45s", defaultWeight: "" },
+  { id: "cat-cow", name: "Cat-Cow", category: "Mobility", muscleGroup: "spine", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 2, defaultReps: "10", defaultWeight: "" },
+  { id: "worlds-greatest-stretch", name: "World's Greatest Stretch", category: "Mobility", muscleGroup: "full body", secondaryMuscles: [], equipment: "none", movementType: "compound", defaultSets: 2, defaultReps: "5", defaultWeight: "" },
+  { id: "thoracic-rotation", name: "Thoracic Rotation", category: "Mobility", muscleGroup: "spine", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 2, defaultReps: "10", defaultWeight: "" },
+  { id: "hamstring-stretch", name: "Hamstring Stretch", category: "Mobility", muscleGroup: "hamstrings", secondaryMuscles: [], equipment: "none", movementType: "isolation", defaultSets: 2, defaultReps: "30s", defaultWeight: "" },
+  { id: "childs-pose", name: "Child's Pose", category: "Mobility", muscleGroup: "back", secondaryMuscles: ["shoulders"], equipment: "none", movementType: "isolation", defaultSets: 2, defaultReps: "45s", defaultWeight: "" },
+  { id: "shoulder-dislocate", name: "Shoulder Dislocate", category: "Mobility", muscleGroup: "shoulders", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 2, defaultReps: "10", defaultWeight: "" },
+  { id: "foam-roll-quads", name: "Foam Roll Quads", category: "Mobility", muscleGroup: "quads", secondaryMuscles: [], equipment: "minimal", movementType: "isolation", defaultSets: 1, defaultReps: "60s", defaultWeight: "" },
+];
+
+// ─── Example Routines ─────────────────────────────────────────────────────────
+
+const EXAMPLE_ROUTINES = [
+  {
+    id: "beginner-full-body", name: "Beginner Full Body",
+    description: "3-day full body program with no equipment. Perfect first step into fitness.",
+    level: "Beginner", goal: "General Fitness", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Full Body A", type: "Strength", exercises: [
+        { name: "Push-Up", sets: 3, reps: "8", weight: "" }, { name: "Bodyweight Squat", sets: 3, reps: "12", weight: "" },
+        { name: "Inverted Row", sets: 3, reps: "8", weight: "" }, { name: "Plank", sets: 3, reps: "20s", weight: "" },
+        { name: "Glute Bridge", sets: 3, reps: "15", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 3", name: "Full Body B", type: "Strength", exercises: [
+        { name: "Wide Push-Up", sets: 3, reps: "8", weight: "" }, { name: "Lunge", sets: 3, reps: "10", weight: "" },
+        { name: "Mountain Climber", sets: 3, reps: "15", weight: "" }, { name: "Side Plank", sets: 2, reps: "15s", weight: "" },
+        { name: "Calf Raise", sets: 3, reps: "20", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 5", name: "Full Body C", type: "Strength", exercises: [
+        { name: "Diamond Push-Up", sets: 3, reps: "6", weight: "" }, { name: "Bulgarian Split Squat", sets: 3, reps: "8", weight: "" },
+        { name: "Pull-Up", sets: 3, reps: "4", weight: "" }, { name: "Hollow Body Hold", sets: 3, reps: "15s", weight: "" },
+        { name: "Donkey Kick", sets: 3, reps: "12", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "calisthenics-foundation", name: "Calisthenics Foundation",
+    description: "Build strength using only your bodyweight. Ideal for home training.",
+    level: "Beginner", goal: "Muscle Gain", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Upper Body", type: "Strength", exercises: [
+        { name: "Push-Up", sets: 4, reps: "10", weight: "" }, { name: "Pull-Up", sets: 3, reps: "5", weight: "" },
+        { name: "Tricep Dips", sets: 3, reps: "10", weight: "" }, { name: "Pike Push-Up", sets: 3, reps: "8", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Lower Body", type: "Strength", exercises: [
+        { name: "Bodyweight Squat", sets: 4, reps: "15", weight: "" }, { name: "Lunge", sets: 3, reps: "12", weight: "" },
+        { name: "Glute Bridge", sets: 3, reps: "15", weight: "" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 4", name: "Upper Body+", type: "Strength", exercises: [
+        { name: "Diamond Push-Up", sets: 3, reps: "8", weight: "" }, { name: "Inverted Row", sets: 3, reps: "10", weight: "" },
+        { name: "Handstand Push-Up", sets: 2, reps: "3", weight: "" }, { name: "Plank", sets: 3, reps: "30s", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "home-dumbbell-starter", name: "Home Dumbbell Starter",
+    description: "3-day full body routine with a pair of dumbbells. Easy to do at home.",
+    level: "Beginner", goal: "Muscle Gain", equipment: "minimal",
+    days: [
+      { dayLabel: "Day 1", name: "Full Body A", type: "Strength", exercises: [
+        { name: "Dumbbell Shoulder Press", sets: 3, reps: "10", weight: "10" }, { name: "Dumbbell Row", sets: 3, reps: "10", weight: "12" },
+        { name: "Bodyweight Squat", sets: 3, reps: "15", weight: "" }, { name: "Bicep Curl", sets: 3, reps: "12", weight: "8" }, { name: "Plank", sets: 3, reps: "20s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 3", name: "Full Body B", type: "Strength", exercises: [
+        { name: "Incline Dumbbell Press", sets: 3, reps: "10", weight: "12" }, { name: "Hammer Curl", sets: 3, reps: "12", weight: "10" },
+        { name: "Lunge", sets: 3, reps: "10", weight: "" }, { name: "Lateral Raise", sets: 3, reps: "12", weight: "6" }, { name: "Dead Bug", sets: 3, reps: "10", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 5", name: "Full Body C", type: "Strength", exercises: [
+        { name: "Hip Thrust", sets: 3, reps: "12", weight: "20" }, { name: "Dumbbell Fly", sets: 3, reps: "12", weight: "10" },
+        { name: "Tricep Overhead Extension", sets: 3, reps: "12", weight: "12" }, { name: "Bulgarian Split Squat", sets: 3, reps: "8", weight: "" }, { name: "Russian Twist", sets: 3, reps: "16", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "hiit-fat-burn", name: "HIIT Fat Burner",
+    description: "High intensity interval training. 3 sessions per week, no equipment needed.",
+    level: "Beginner", goal: "Fat Loss", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "HIIT Circuit A", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 3, reps: "10", weight: "" }, { name: "High Knees", sets: 3, reps: "30s", weight: "" },
+        { name: "Jump Squat", sets: 3, reps: "15", weight: "" }, { name: "Mountain Climber", sets: 3, reps: "20", weight: "" }, { name: "Jumping Jack", sets: 3, reps: "30s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 3", name: "HIIT Circuit B", type: "HIIT", exercises: [
+        { name: "Box Jump", sets: 3, reps: "10", weight: "" }, { name: "Burpee", sets: 3, reps: "8", weight: "" },
+        { name: "High Knees", sets: 3, reps: "30s", weight: "" }, { name: "Push-Up", sets: 3, reps: "10", weight: "" }, { name: "Sprint", sets: 4, reps: "20s", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 5", name: "Full Body HIIT", type: "HIIT", exercises: [
+        { name: "Jump Squat", sets: 4, reps: "12", weight: "" }, { name: "Mountain Climber", sets: 3, reps: "30s", weight: "" },
+        { name: "Burpee", sets: 3, reps: "10", weight: "" }, { name: "Jumping Jack", sets: 3, reps: "30s", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "yoga-mobility-flow", name: "Mobility & Yoga Flow",
+    description: "Daily 20-min mobility routine. Improves flexibility and reduces soreness.",
+    level: "Beginner", goal: "Flexibility", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Morning Flow", type: "Mobility", exercises: [
+        { name: "Cat-Cow", sets: 2, reps: "10", weight: "" }, { name: "World's Greatest Stretch", sets: 2, reps: "5", weight: "" },
+        { name: "Hip Flexor Stretch", sets: 2, reps: "30s", weight: "" }, { name: "Child's Pose", sets: 2, reps: "45s", weight: "" }, { name: "Thoracic Rotation", sets: 2, reps: "10", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Hip & Hamstring", type: "Mobility", exercises: [
+        { name: "Pigeon Pose", sets: 2, reps: "45s", weight: "" }, { name: "Hamstring Stretch", sets: 2, reps: "30s", weight: "" },
+        { name: "Hip Flexor Stretch", sets: 2, reps: "30s", weight: "" }, { name: "Glute Bridge", sets: 2, reps: "15", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Upper Body Release", type: "Mobility", exercises: [
+        { name: "Child's Pose", sets: 2, reps: "45s", weight: "" }, { name: "Cat-Cow", sets: 2, reps: "10", weight: "" },
+        { name: "Thoracic Rotation", sets: 2, reps: "10", weight: "" }, { name: "World's Greatest Stretch", sets: 2, reps: "5", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Full Body Flow", type: "Mobility", exercises: [
+        { name: "World's Greatest Stretch", sets: 3, reps: "5", weight: "" }, { name: "Pigeon Pose", sets: 2, reps: "60s", weight: "" },
+        { name: "Cat-Cow", sets: 2, reps: "15", weight: "" }, { name: "Hip Flexor Stretch", sets: 2, reps: "45s", weight: "" },
+      ]},
+      { dayLabel: "Day 5", name: "Recovery Flow", type: "Mobility", exercises: [
+        { name: "Hamstring Stretch", sets: 2, reps: "45s", weight: "" }, { name: "Child's Pose", sets: 2, reps: "60s", weight: "" },
+        { name: "Cat-Cow", sets: 2, reps: "10", weight: "" }, { name: "Pigeon Pose", sets: 2, reps: "45s", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "simple-3-day-strength", name: "Simple 3-Day Strength",
+    description: "Squat, bench, deadlift 3x per week. Classic strength building program.",
+    level: "Intermediate", goal: "Muscle Gain", equipment: "full",
+    days: [
+      { dayLabel: "Day 1", name: "Squat + Press", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 4, reps: "5", weight: "80" }, { name: "Bench Press", sets: 4, reps: "5", weight: "70" },
+        { name: "Barbell Row", sets: 3, reps: "8", weight: "60" }, { name: "Plank", sets: 3, reps: "45s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 3", name: "Deadlift + OHP", type: "Strength", exercises: [
+        { name: "Deadlift", sets: 4, reps: "5", weight: "100" }, { name: "Overhead Press", sets: 4, reps: "5", weight: "50" },
+        { name: "Lat Pulldown", sets: 3, reps: "10", weight: "60" }, { name: "Leg Curl", sets: 3, reps: "12", weight: "40" },
+      ]},
+      { dayLabel: "Day 4", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 5", name: "Squat + Bench+", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 4, reps: "5", weight: "82.5" }, { name: "Bench Press", sets: 4, reps: "5", weight: "72.5" },
+        { name: "Romanian Deadlift", sets: 3, reps: "10", weight: "70" }, { name: "Face Pull", sets: 3, reps: "15", weight: "20" },
+      ]},
+    ],
+  },
+  {
+    id: "upper-lower-split", name: "Upper/Lower Split",
+    description: "4-day split alternating upper and lower body workouts. Great for muscle and strength.",
+    level: "Intermediate", goal: "Muscle Gain", equipment: "full",
+    days: [
+      { dayLabel: "Day 1", name: "Upper A", type: "Strength", exercises: [
+        { name: "Bench Press", sets: 4, reps: "8", weight: "70" }, { name: "Barbell Row", sets: 4, reps: "8", weight: "60" },
+        { name: "Overhead Press", sets: 3, reps: "10", weight: "45" }, { name: "Lat Pulldown", sets: 3, reps: "10", weight: "55" }, { name: "Bicep Curl", sets: 3, reps: "12", weight: "15" },
+      ]},
+      { dayLabel: "Day 2", name: "Lower A", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 4, reps: "8", weight: "80" }, { name: "Romanian Deadlift", sets: 3, reps: "10", weight: "70" },
+        { name: "Leg Press", sets: 3, reps: "12", weight: "100" }, { name: "Leg Curl", sets: 3, reps: "12", weight: "40" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 4", name: "Upper B", type: "Strength", exercises: [
+        { name: "Incline Dumbbell Press", sets: 4, reps: "10", weight: "24" }, { name: "Dumbbell Row", sets: 4, reps: "10", weight: "24" },
+        { name: "Lateral Raise", sets: 3, reps: "15", weight: "10" }, { name: "Face Pull", sets: 3, reps: "15", weight: "20" }, { name: "Tricep Overhead Extension", sets: 3, reps: "12", weight: "20" },
+      ]},
+      { dayLabel: "Day 5", name: "Lower B", type: "Strength", exercises: [
+        { name: "Deadlift", sets: 4, reps: "5", weight: "100" }, { name: "Leg Extension", sets: 3, reps: "12", weight: "40" },
+        { name: "Hip Thrust", sets: 3, reps: "12", weight: "60" }, { name: "Bulgarian Split Squat", sets: 3, reps: "8", weight: "" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "ppl-6-day", name: "Push Pull Legs (PPL)",
+    description: "Classic 6-day PPL split. The go-to program for muscle gain at the gym.",
+    level: "Intermediate", goal: "Muscle Gain", equipment: "full",
+    days: [
+      { dayLabel: "Day 1", name: "Push", type: "Strength", exercises: [
+        { name: "Bench Press", sets: 4, reps: "8", weight: "70" }, { name: "Overhead Press", sets: 3, reps: "10", weight: "45" },
+        { name: "Incline Dumbbell Press", sets: 3, reps: "10", weight: "22" }, { name: "Lateral Raise", sets: 3, reps: "15", weight: "10" }, { name: "Tricep Dips", sets: 3, reps: "12", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Pull", type: "Strength", exercises: [
+        { name: "Deadlift", sets: 4, reps: "5", weight: "100" }, { name: "Barbell Row", sets: 4, reps: "8", weight: "65" },
+        { name: "Lat Pulldown", sets: 3, reps: "10", weight: "60" }, { name: "Face Pull", sets: 3, reps: "15", weight: "20" }, { name: "Bicep Curl", sets: 3, reps: "12", weight: "15" },
+      ]},
+      { dayLabel: "Day 3", name: "Legs", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 4, reps: "8", weight: "80" }, { name: "Romanian Deadlift", sets: 3, reps: "10", weight: "70" },
+        { name: "Leg Press", sets: 3, reps: "12", weight: "120" }, { name: "Leg Curl", sets: 3, reps: "12", weight: "40" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Push+", type: "Strength", exercises: [
+        { name: "Incline Dumbbell Press", sets: 4, reps: "10", weight: "24" }, { name: "Cable Fly", sets: 3, reps: "15", weight: "15" },
+        { name: "Arnold Press", sets: 3, reps: "10", weight: "14" }, { name: "Lateral Raise", sets: 3, reps: "15", weight: "10" }, { name: "Skull Crusher", sets: 3, reps: "12", weight: "25" },
+      ]},
+      { dayLabel: "Day 5", name: "Pull+", type: "Strength", exercises: [
+        { name: "Barbell Row", sets: 4, reps: "8", weight: "65" }, { name: "Lat Pulldown", sets: 3, reps: "10", weight: "60" },
+        { name: "Dumbbell Row", sets: 3, reps: "10", weight: "24" }, { name: "Hammer Curl", sets: 3, reps: "12", weight: "14" }, { name: "Concentration Curl", sets: 3, reps: "12", weight: "12" },
+      ]},
+      { dayLabel: "Day 6", name: "Legs+", type: "Strength", exercises: [
+        { name: "Leg Press", sets: 4, reps: "12", weight: "120" }, { name: "Bulgarian Split Squat", sets: 3, reps: "10", weight: "" },
+        { name: "Leg Extension", sets: 3, reps: "15", weight: "40" }, { name: "Hip Thrust", sets: 3, reps: "12", weight: "60" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "home-athlete", name: "Home Athlete",
+    description: "4-day bodyweight program for a strong, functional physique at home.",
+    level: "Intermediate", goal: "General Fitness", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Push + Core", type: "Strength", exercises: [
+        { name: "Push-Up", sets: 4, reps: "15", weight: "" }, { name: "Diamond Push-Up", sets: 3, reps: "12", weight: "" },
+        { name: "Pike Push-Up", sets: 3, reps: "10", weight: "" }, { name: "Tricep Dips", sets: 3, reps: "15", weight: "" }, { name: "Plank", sets: 3, reps: "45s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Pull + Core", type: "Strength", exercises: [
+        { name: "Pull-Up", sets: 4, reps: "8", weight: "" }, { name: "Chin-Up", sets: 3, reps: "8", weight: "" },
+        { name: "Inverted Row", sets: 3, reps: "12", weight: "" }, { name: "Hollow Body Hold", sets: 3, reps: "20s", weight: "" }, { name: "Leg Raise", sets: 3, reps: "12", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Legs", type: "Strength", exercises: [
+        { name: "Bodyweight Squat", sets: 4, reps: "20", weight: "" }, { name: "Jump Squat", sets: 3, reps: "15", weight: "" },
+        { name: "Bulgarian Split Squat", sets: 3, reps: "12", weight: "" }, { name: "Glute Bridge", sets: 3, reps: "20", weight: "" }, { name: "Calf Raise", sets: 4, reps: "25", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Full Body HIIT", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 4, reps: "10", weight: "" }, { name: "Mountain Climber", sets: 3, reps: "30s", weight: "" },
+        { name: "Jump Squat", sets: 3, reps: "15", weight: "" }, { name: "High Knees", sets: 3, reps: "30s", weight: "" }, { name: "Box Jump", sets: 3, reps: "10", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "minimal-equipment-gains", name: "Minimal Equipment Gains",
+    description: "4-day program with just dumbbells. Max gains, minimal gear.",
+    level: "Intermediate", goal: "Muscle Gain", equipment: "minimal",
+    days: [
+      { dayLabel: "Day 1", name: "Upper A", type: "Strength", exercises: [
+        { name: "Incline Dumbbell Press", sets: 4, reps: "10", weight: "22" }, { name: "Dumbbell Row", sets: 4, reps: "10", weight: "24" },
+        { name: "Dumbbell Shoulder Press", sets: 3, reps: "10", weight: "16" }, { name: "Bicep Curl", sets: 3, reps: "12", weight: "14" }, { name: "Tricep Overhead Extension", sets: 3, reps: "12", weight: "18" },
+      ]},
+      { dayLabel: "Day 2", name: "Lower A", type: "Strength", exercises: [
+        { name: "Bulgarian Split Squat", sets: 4, reps: "10", weight: "" }, { name: "Hip Thrust", sets: 4, reps: "15", weight: "30" },
+        { name: "Lunge", sets: 3, reps: "12", weight: "" }, { name: "Calf Raise", sets: 4, reps: "20", weight: "" }, { name: "Dead Bug", sets: 3, reps: "10", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 4", name: "Upper B", type: "Strength", exercises: [
+        { name: "Dumbbell Fly", sets: 3, reps: "12", weight: "14" }, { name: "Arnold Press", sets: 3, reps: "10", weight: "14" },
+        { name: "Hammer Curl", sets: 3, reps: "12", weight: "14" }, { name: "Lateral Raise", sets: 3, reps: "15", weight: "8" }, { name: "Skull Crusher", sets: 3, reps: "12", weight: "20" },
+      ]},
+      { dayLabel: "Day 5", name: "Lower B", type: "Strength", exercises: [
+        { name: "Sumo Squat", sets: 4, reps: "15", weight: "" }, { name: "Romanian Deadlift", sets: 3, reps: "12", weight: "30" },
+        { name: "Fire Hydrant", sets: 3, reps: "15", weight: "" }, { name: "Donkey Kick", sets: 3, reps: "15", weight: "" }, { name: "Russian Twist", sets: 3, reps: "20", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "hiit-cardio-blend", name: "HIIT + Cardio Blend",
+    description: "4 sessions combining HIIT and cardio. Efficient fat loss at home.",
+    level: "Intermediate", goal: "Fat Loss", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "HIIT A", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 4, reps: "12", weight: "" }, { name: "Jump Squat", sets: 4, reps: "15", weight: "" },
+        { name: "Mountain Climber", sets: 3, reps: "30s", weight: "" }, { name: "High Knees", sets: 3, reps: "30s", weight: "" }, { name: "Box Jump", sets: 3, reps: "12", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Steady State", type: "Cardio", exercises: [
+        { name: "Sprint", sets: 6, reps: "30s", weight: "" }, { name: "Jumping Jack", sets: 5, reps: "60s", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Rest", type: "Rest", exercises: [] },
+      { dayLabel: "Day 4", name: "HIIT B", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 4, reps: "10", weight: "" }, { name: "Push-Up", sets: 3, reps: "15", weight: "" },
+        { name: "Sprint", sets: 5, reps: "20s", weight: "" }, { name: "Mountain Climber", sets: 3, reps: "30s", weight: "" }, { name: "Jumping Jack", sets: 3, reps: "30s", weight: "" },
+      ]},
+      { dayLabel: "Day 5", name: "Strength + Cardio", type: "HIIT", exercises: [
+        { name: "Jump Squat", sets: 4, reps: "15", weight: "" }, { name: "Box Jump", sets: 3, reps: "10", weight: "" },
+        { name: "High Knees", sets: 3, reps: "60s", weight: "" }, { name: "Burpee", sets: 3, reps: "10", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "advanced-ppl", name: "Advanced PPL",
+    description: "High volume 6-day PPL for experienced lifters. Maximum hypertrophy.",
+    level: "Advanced", goal: "Muscle Gain", equipment: "full",
+    days: [
+      { dayLabel: "Day 1", name: "Push", type: "Strength", exercises: [
+        { name: "Bench Press", sets: 5, reps: "5", weight: "90" }, { name: "Overhead Press", sets: 4, reps: "8", weight: "60" },
+        { name: "Incline Dumbbell Press", sets: 4, reps: "10", weight: "30" }, { name: "Lateral Raise", sets: 4, reps: "15", weight: "12" }, { name: "Skull Crusher", sets: 3, reps: "12", weight: "35" },
+      ]},
+      { dayLabel: "Day 2", name: "Pull", type: "Strength", exercises: [
+        { name: "Deadlift", sets: 5, reps: "5", weight: "140" }, { name: "Barbell Row", sets: 4, reps: "6", weight: "90" },
+        { name: "Lat Pulldown", sets: 4, reps: "10", weight: "75" }, { name: "Face Pull", sets: 3, reps: "15", weight: "25" }, { name: "Preacher Curl", sets: 3, reps: "10", weight: "25" },
+      ]},
+      { dayLabel: "Day 3", name: "Legs", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 5, reps: "5", weight: "120" }, { name: "Romanian Deadlift", sets: 4, reps: "8", weight: "90" },
+        { name: "Leg Press", sets: 4, reps: "12", weight: "160" }, { name: "Leg Curl", sets: 4, reps: "12", weight: "55" }, { name: "Calf Raise", sets: 5, reps: "20", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Push+", type: "Strength", exercises: [
+        { name: "Incline Dumbbell Press", sets: 4, reps: "10", weight: "30" }, { name: "Arnold Press", sets: 4, reps: "10", weight: "20" },
+        { name: "Cable Fly", sets: 3, reps: "15", weight: "20" }, { name: "Lateral Raise", sets: 4, reps: "15", weight: "12" }, { name: "Cable Tricep Pushdown", sets: 4, reps: "15", weight: "35" },
+      ]},
+      { dayLabel: "Day 5", name: "Pull+", type: "Strength", exercises: [
+        { name: "Barbell Row", sets: 4, reps: "8", weight: "85" }, { name: "Dumbbell Row", sets: 4, reps: "10", weight: "30" },
+        { name: "Lat Pulldown", sets: 3, reps: "12", weight: "70" }, { name: "Hammer Curl", sets: 3, reps: "12", weight: "18" }, { name: "Concentration Curl", sets: 3, reps: "12", weight: "16" },
+      ]},
+      { dayLabel: "Day 6", name: "Legs+", type: "Strength", exercises: [
+        { name: "Barbell Squat", sets: 4, reps: "8", weight: "110" }, { name: "Hip Thrust", sets: 4, reps: "12", weight: "90" },
+        { name: "Leg Extension", sets: 4, reps: "15", weight: "50" }, { name: "Bulgarian Split Squat", sets: 3, reps: "10", weight: "" }, { name: "Calf Raise", sets: 5, reps: "20", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "advanced-calisthenics", name: "Advanced Calisthenics",
+    description: "High intensity bodyweight program targeting maximal strength and muscle control.",
+    level: "Advanced", goal: "Muscle Gain", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Upper Push", type: "Strength", exercises: [
+        { name: "Diamond Push-Up", sets: 5, reps: "15", weight: "" }, { name: "Handstand Push-Up", sets: 4, reps: "6", weight: "" },
+        { name: "Tricep Dips", sets: 4, reps: "15", weight: "" }, { name: "Pike Push-Up", sets: 4, reps: "12", weight: "" }, { name: "Hollow Body Hold", sets: 4, reps: "30s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Upper Pull", type: "Strength", exercises: [
+        { name: "Pull-Up", sets: 5, reps: "10", weight: "" }, { name: "Chin-Up", sets: 4, reps: "10", weight: "" },
+        { name: "Inverted Row", sets: 3, reps: "15", weight: "" }, { name: "L-Sit Hold", sets: 3, reps: "10s", weight: "" }, { name: "Leg Raise", sets: 3, reps: "15", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Legs + Core", type: "Strength", exercises: [
+        { name: "Jump Squat", sets: 4, reps: "20", weight: "" }, { name: "Bulgarian Split Squat", sets: 4, reps: "12", weight: "" },
+        { name: "Glute Bridge", sets: 4, reps: "20", weight: "" }, { name: "Calf Raise", sets: 5, reps: "25", weight: "" }, { name: "Ab Wheel Rollout", sets: 4, reps: "10", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Full Body Power", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 5, reps: "12", weight: "" }, { name: "Box Jump", sets: 4, reps: "12", weight: "" },
+        { name: "Push-Up", sets: 4, reps: "20", weight: "" }, { name: "Pull-Up", sets: 4, reps: "8", weight: "" }, { name: "Mountain Climber", sets: 4, reps: "30s", weight: "" },
+      ]},
+    ],
+  },
+  {
+    id: "endurance-base-build", name: "Endurance Base Build",
+    description: "5-day program to build cardiovascular endurance and work capacity.",
+    level: "Intermediate", goal: "Endurance", equipment: "none",
+    days: [
+      { dayLabel: "Day 1", name: "Steady Cardio", type: "Cardio", exercises: [
+        { name: "Sprint", sets: 8, reps: "30s", weight: "" }, { name: "Jumping Jack", sets: 5, reps: "60s", weight: "" }, { name: "High Knees", sets: 4, reps: "60s", weight: "" },
+      ]},
+      { dayLabel: "Day 2", name: "Strength Endurance", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 5, reps: "12", weight: "" }, { name: "Mountain Climber", sets: 4, reps: "45s", weight: "" },
+        { name: "Push-Up", sets: 4, reps: "15", weight: "" }, { name: "Bodyweight Squat", sets: 4, reps: "20", weight: "" }, { name: "Plank", sets: 3, reps: "60s", weight: "" },
+      ]},
+      { dayLabel: "Day 3", name: "Active Rest", type: "Mobility", exercises: [
+        { name: "World's Greatest Stretch", sets: 2, reps: "5", weight: "" }, { name: "Hip Flexor Stretch", sets: 2, reps: "30s", weight: "" }, { name: "Hamstring Stretch", sets: 2, reps: "30s", weight: "" },
+      ]},
+      { dayLabel: "Day 4", name: "Circuit A", type: "HIIT", exercises: [
+        { name: "Box Jump", sets: 4, reps: "12", weight: "" }, { name: "Sprint", sets: 6, reps: "20s", weight: "" },
+        { name: "Jump Squat", sets: 3, reps: "15", weight: "" }, { name: "Jumping Jack", sets: 3, reps: "60s", weight: "" },
+      ]},
+      { dayLabel: "Day 5", name: "Long Circuit", type: "HIIT", exercises: [
+        { name: "Burpee", sets: 6, reps: "10", weight: "" }, { name: "High Knees", sets: 5, reps: "45s", weight: "" },
+        { name: "Mountain Climber", sets: 4, reps: "30s", weight: "" }, { name: "Push-Up", sets: 3, reps: "12", weight: "" }, { name: "Bodyweight Squat", sets: 3, reps: "20", weight: "" },
+      ]},
+    ],
+  },
+];
+
+// ─── Exercise Picker Modal ────────────────────────────────────────────────────
+
+function ExercisePickerModal({ onClose, onPick, multiSelect, prs }) {
+  const [search, setSearch] = useState("");
+  const [filterCat, setFilterCat] = useState("All");
+  const [filterEquip, setFilterEquip] = useState("All");
+  const [selected, setSelected] = useState(new Set());
+  const categories = ["All", ...new Set(EXERCISE_LIBRARY.map(e => e.category))];
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "9px 12px", color: COLORS.text, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
+  const filtered = EXERCISE_LIBRARY.filter(e => {
+    if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterCat !== "All" && e.category !== filterCat) return false;
+    if (filterEquip !== "All" && e.equipment !== filterEquip) return false;
+    return true;
+  });
+  const getPR = (name) => {
+    const key = Object.keys(prs || {}).find(k => k.toLowerCase() === name.toLowerCase());
+    return key ? prs[key] : null;
+  };
+  const toggleSelect = (ex) => {
+    if (!multiSelect) { onPick([ex]); onClose(); return; }
+    setSelected(prev => { const s = new Set(prev); s.has(ex.id) ? s.delete(ex.id) : s.add(ex.id); return s; });
+  };
+  const handleDone = () => { onPick(EXERCISE_LIBRARY.filter(e => selected.has(e.id))); onClose(); };
+  const chipStyle = (active, color) => ({ padding: "5px 11px", borderRadius: 9, border: `1px solid ${active ? color : COLORS.border}`, background: active ? color + "22" : COLORS.bg, color: active ? color : COLORS.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 });
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 550, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+        <div style={{ padding: "20px 20px 10px", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Exercise Library</h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search exercises..." style={inputStyle} />
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginTop: 10, scrollbarWidth: "none" }}>
+            {categories.map(c => <button key={c} onClick={() => setFilterCat(c)} style={chipStyle(filterCat === c, COLORS.accent)}>{c}</button>)}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            {[["All","All Equip"],["none","No Equip"],["minimal","Minimal"],["full","Full Gym"]].map(([val,label]) => (
+              <button key={val} onClick={() => setFilterEquip(val)} style={chipStyle(filterEquip === val, COLORS.blue)}>{label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
+          {filtered.length === 0 && <div style={{ textAlign: "center", color: COLORS.muted, padding: 32, fontSize: 13 }}>No exercises found</div>}
+          {filtered.map(ex => {
+            const pr = getPR(ex.name);
+            const isSel = selected.has(ex.id);
+            return (
+              <div key={ex.id} onClick={() => toggleSelect(ex)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${COLORS.border}`, cursor: "pointer" }}>
+                {multiSelect && (
+                  <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${isSel ? COLORS.accent : COLORS.border}`, background: isSel ? COLORS.accent : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {isSel && <span style={{ fontSize: 12, color: "#000", fontWeight: 900 }}>✓</span>}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{ex.name}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                    {ex.category} · {EQUIP_LABEL[ex.equipment] || ex.equipment}
+                    {ex.movementType === "compound" && <span style={{ color: COLORS.blue }}> · Compound</span>}
+                  </div>
+                </div>
+                {pr && (
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <span style={{ fontSize: 13 }}>🏆</span>
+                    <div style={{ fontSize: 10, color: COLORS.yellow, fontWeight: 700 }}>{pr.best1RM ? `${pr.best1RM}kg` : `${pr.bestReps}r`}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ height: 80 }} />
+        </div>
+        {multiSelect && (
+          <div style={{ padding: "12px 20px calc(12px + env(safe-area-inset-bottom,0px))", flexShrink: 0, borderTop: `1px solid ${COLORS.border}` }}>
+            <button onClick={handleDone} disabled={selected.size === 0}
+              style={{ width: "100%", padding: 13, background: selected.size > 0 ? COLORS.accent : COLORS.border, color: selected.size > 0 ? "#000" : COLORS.muted, border: "none", borderRadius: 14, fontWeight: 800, fontSize: 15, cursor: selected.size > 0 ? "pointer" : "default" }}>
+              Add {selected.size > 0 ? `${selected.size} Exercise${selected.size > 1 ? "s" : ""}` : "Exercises"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Create Routine Modal ─────────────────────────────────────────────────────
+
+function CreateRoutineModal({ onClose, onSave, onOpenExercisePicker }) {
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState({ name: "", description: "", goal: "General Fitness", level: "Beginner", equipment: "none", days: [] });
+  const [expandedDay, setExpandedDay] = useState(null);
+  const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "9px 12px", color: COLORS.text, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
+  const smallInput = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "6px 8px", color: COLORS.text, fontSize: 12, textAlign: "center", outline: "none", width: "100%" };
+  const chip = (active, color) => ({ padding: "7px 13px", borderRadius: 9, border: `1px solid ${active ? color : COLORS.border}`, background: active ? color + "22" : COLORS.bg, color: active ? color : COLORS.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" });
+  const addDay = () => {
+    const d = { id: Date.now(), dayLabel: `Day ${data.days.length + 1}`, name: "", type: "Strength", exercises: [] };
+    setData(prev => ({ ...prev, days: [...prev.days, d] }));
+    setExpandedDay(d.id);
+  };
+  const updateDay = (id, field, val) => setData(prev => ({ ...prev, days: prev.days.map(d => d.id === id ? { ...d, [field]: val } : d) }));
+  const removeDay = (id) => setData(prev => ({ ...prev, days: prev.days.filter(d => d.id !== id) }));
+  const addExsToDay = (dayId, exs) => setData(prev => ({ ...prev, days: prev.days.map(d => {
+    if (d.id !== dayId) return d;
+    const newExs = exs.map(ex => ({ id: Date.now() + Math.random(), name: ex.name, sets: String(ex.defaultSets || 3), reps: ex.defaultReps || "10", weight: ex.defaultWeight || "" }));
+    return { ...d, exercises: [...d.exercises, ...newExs] };
+  })}));
+  const removeEx = (dayId, exId) => setData(prev => ({ ...prev, days: prev.days.map(d => d.id !== dayId ? d : { ...d, exercises: d.exercises.filter(e => e.id !== exId) }) }));
+  const updateEx = (dayId, exId, field, val) => setData(prev => ({ ...prev, days: prev.days.map(d => d.id !== dayId ? d : { ...d, exercises: d.exercises.map(e => e.id !== exId ? e : { ...e, [field]: val }) }) }));
+  const handleSave = () => { onSave({ id: Date.now(), ...data, created_at: new Date().toISOString(), source: "custom" }); onClose(); };
+  const canNext = step === 0 ? data.name.trim().length > 0 : true;
+  const canSave = data.name.trim().length > 0 && data.days.filter(d => d.type !== "Rest").length > 0;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "92vh" }}>
+        <div style={{ padding: "20px 20px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>
+              {step === 0 ? "New Routine" : step === 1 ? "Add Days" : "Review"}
+            </h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+            {[0,1,2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i <= step ? COLORS.accent : COLORS.border }} />)}
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
+          {step === 0 && (
+            <>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Routine Name *</label>
+                <input value={data.name} onChange={e => setData(d => ({ ...d, name: e.target.value }))} placeholder="e.g. My PPL Split" style={inputStyle} autoFocus />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 6 }}>Description (optional)</label>
+                <input value={data.description} onChange={e => setData(d => ({ ...d, description: e.target.value }))} placeholder="Brief description..." style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Goal</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {["General Fitness","Muscle Gain","Fat Loss","Endurance","Flexibility"].map(g => (
+                    <button key={g} onClick={() => setData(d => ({ ...d, goal: g }))} style={chip(data.goal === g, COLORS.accent)}>{g}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Level</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["Beginner","Intermediate","Advanced"].map(l => (
+                    <button key={l} onClick={() => setData(d => ({ ...d, level: l }))} style={chip(data.level === l, LEVEL_COLOR[l] || COLORS.accent)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Equipment</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["none","No Equipment"],["minimal","Minimal"],["full","Full Gym"]].map(([val,label]) => (
+                    <button key={val} onClick={() => setData(d => ({ ...d, equipment: val }))} style={chip(data.equipment === val, EQUIP_COLOR[val] || COLORS.accent)}>{label}</button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {step === 1 && (
+            <>
+              {data.days.length === 0 && <div style={{ textAlign: "center", color: COLORS.muted, padding: "32px 0", fontSize: 13 }}>No days yet. Tap "+ Add Day" below.</div>}
+              {data.days.map((day) => (
+                <div key={day.id} style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <input value={day.dayLabel} onChange={e => updateDay(day.id, "dayLabel", e.target.value)}
+                      style={{ ...smallInput, width: 56, textAlign: "left", fontWeight: 700 }} />
+                    <input value={day.name} onChange={e => updateDay(day.id, "name", e.target.value)}
+                      placeholder="e.g. Push Day" style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontSize: 13 }} />
+                    <button onClick={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+                      style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.muted, fontSize: 11, padding: "5px 8px", cursor: "pointer" }}>
+                      {expandedDay === day.id ? "▲" : "▼"}
+                    </button>
+                    <button onClick={() => removeDay(day.id)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 16, cursor: "pointer", padding: "0 2px" }}>✕</button>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {ROUTINE_TYPES.map(t => (
+                      <button key={t} onClick={() => updateDay(day.id, "type", t)}
+                        style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${day.type === t ? ROUTINE_TYPE_COLOR[t] : COLORS.border}`, background: day.type === t ? ROUTINE_TYPE_COLOR[t] + "22" : COLORS.bg, color: day.type === t ? ROUTINE_TYPE_COLOR[t] : COLORS.muted, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  {expandedDay === day.id && (
+                    <div style={{ marginTop: 10 }}>
+                      {day.exercises.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 48px 48px 48px 24px", gap: 4, marginBottom: 4 }}>
+                          <div style={{ fontSize: 9, color: COLORS.muted, textTransform: "uppercase" }}>Exercise</div>
+                          {["Sets","Reps","kg",""].map((h,i) => <div key={i} style={{ fontSize: 9, color: COLORS.muted, textAlign: "center" }}>{h}</div>)}
+                        </div>
+                      )}
+                      {day.exercises.map(ex => (
+                        <div key={ex.id} style={{ display: "grid", gridTemplateColumns: "1fr 48px 48px 48px 24px", gap: 4, alignItems: "center", marginBottom: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ex.name}</div>
+                          <input value={ex.sets} onChange={e => updateEx(day.id, ex.id, "sets", e.target.value)} style={smallInput} />
+                          <input value={ex.reps} onChange={e => updateEx(day.id, ex.id, "reps", e.target.value)} style={smallInput} />
+                          <input value={ex.weight} onChange={e => updateEx(day.id, ex.id, "weight", e.target.value)} placeholder="BW" style={smallInput} />
+                          <button onClick={() => removeEx(day.id, ex.id)} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
+                        </div>
+                      ))}
+                      <button onClick={() => onOpenExercisePicker(exs => addExsToDay(day.id, exs))}
+                        style={{ width: "100%", padding: "8px 0", background: COLORS.bg, border: `1px dashed ${COLORS.accent}`, borderRadius: 10, color: COLORS.accent, fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 4 }}>
+                        + Add Exercises from Library
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button onClick={addDay}
+                style={{ width: "100%", padding: "12px 0", background: COLORS.bg, border: `1px dashed ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
+                + Add Day
+              </button>
+            </>
+          )}
+          {step === 2 && (
+            <>
+              <div style={{ background: COLORS.card, borderRadius: 14, padding: 14, marginBottom: 14, border: `1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>{data.name || "Untitled Routine"}</div>
+                {data.description && <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>{data.description}</div>}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ padding: "3px 10px", borderRadius: 8, background: (LEVEL_COLOR[data.level] || COLORS.accent) + "22", color: LEVEL_COLOR[data.level] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{data.level}</span>
+                  <span style={{ padding: "3px 10px", borderRadius: 8, background: (EQUIP_COLOR[data.equipment] || COLORS.accent) + "22", color: EQUIP_COLOR[data.equipment] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{EQUIP_LABEL[data.equipment]}</span>
+                  <span style={{ padding: "3px 10px", borderRadius: 8, background: COLORS.accentDim, color: COLORS.accent, fontSize: 11, fontWeight: 700 }}>{data.goal}</span>
+                  <span style={{ padding: "3px 10px", borderRadius: 8, background: COLORS.bg, color: COLORS.muted, fontSize: 11 }}>{data.days.length} day{data.days.length !== 1 ? "s" : ""}</span>
+                </div>
+              </div>
+              {data.days.map(day => (
+                <div key={day.id} style={{ background: COLORS.card, borderRadius: 12, padding: "10px 14px", marginBottom: 8, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text }}>{day.dayLabel}{day.name ? ` — ${day.name}` : ""}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 3 }}>{day.exercises.length} exercise{day.exercises.length !== 1 ? "s" : ""} · {day.type}</div>
+                </div>
+              ))}
+              <div style={{ height: 16 }} />
+            </>
+          )}
+        </div>
+        <div style={{ padding: "12px 20px calc(12px + env(safe-area-inset-bottom,0px))", flexShrink: 0, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 10 }}>
+          {step > 0 && (
+            <button onClick={() => setStep(s => s - 1)}
+              style={{ flex: 1, padding: 12, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              ← Back
+            </button>
+          )}
+          {step < 2 ? (
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext}
+              style={{ flex: 2, padding: 12, background: canNext ? COLORS.accent : COLORS.border, color: canNext ? "#000" : COLORS.muted, border: "none", borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: canNext ? "pointer" : "default" }}>
+              Next →
+            </button>
+          ) : (
+            <button onClick={handleSave} disabled={!canSave}
+              style={{ flex: 2, padding: 12, background: canSave ? COLORS.accent : COLORS.border, color: canSave ? "#000" : COLORS.muted, border: "none", borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: canSave ? "pointer" : "default" }}>
+              Save Routine
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Explore Modal ────────────────────────────────────────────────────────────
+
+function ExploreModal({ onClose, onSaveRoutine, onApplyToWeek }) {
+  const [filters, setFilters] = useState({ level: "All", goal: "All", equipment: "All" });
+  const [detail, setDetail] = useState(null);
+  const [expandedDays, setExpandedDays] = useState(new Set());
+  const [confirmApply, setConfirmApply] = useState(null);
+  const filtered = EXAMPLE_ROUTINES.filter(r =>
+    (filters.level === "All" || r.level === filters.level) &&
+    (filters.goal === "All" || r.goal === filters.goal) &&
+    (filters.equipment === "All" || r.equipment === filters.equipment)
+  );
+  const chip = (active, color) => ({ padding: "5px 11px", borderRadius: 9, border: `1px solid ${active ? color : COLORS.border}`, background: active ? color + "22" : COLORS.bg, color: active ? color : COLORS.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 });
+  const toggleDay = (i) => setExpandedDays(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+  if (confirmApply) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 510, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "24px 24px calc(24px + env(safe-area-inset-bottom,0px))" }}>
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10, color: COLORS.text }}>Apply to This Week?</div>
+          <div style={{ fontSize: 14, color: COLORS.muted, marginBottom: 20, lineHeight: 1.5 }}>
+            This will replace your current weekly schedule with &quot;{confirmApply.name}&quot;. Saved routines and workout history are not affected.
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setConfirmApply(null)} style={{ flex: 1, padding: 13, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+            <button onClick={() => { onApplyToWeek(confirmApply); setConfirmApply(null); onClose(); }}
+              style={{ flex: 2, padding: 13, background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>Apply Routine</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (detail) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 510, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "92vh" }}>
+          <div style={{ padding: "20px 20px 12px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              <button onClick={() => { setDetail(null); setExpandedDays(new Set()); }} style={{ background: "none", border: "none", color: COLORS.accent, fontSize: 14, cursor: "pointer", fontWeight: 700 }}>← Back</button>
+              <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer", marginLeft: "auto" }}>✕</button>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>{detail.name}</div>
+            <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 10 }}>{detail.description}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ padding: "3px 10px", borderRadius: 8, background: (LEVEL_COLOR[detail.level] || COLORS.accent) + "22", color: LEVEL_COLOR[detail.level] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{detail.level}</span>
+              <span style={{ padding: "3px 10px", borderRadius: 8, background: (EQUIP_COLOR[detail.equipment] || COLORS.accent) + "22", color: EQUIP_COLOR[detail.equipment] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{EQUIP_LABEL[detail.equipment]}</span>
+              <span style={{ padding: "3px 10px", borderRadius: 8, background: COLORS.accentDim, color: COLORS.accent, fontSize: 11, fontWeight: 700 }}>{detail.goal}</span>
+              <span style={{ padding: "3px 10px", borderRadius: 8, background: COLORS.bg, color: COLORS.muted, fontSize: 11 }}>{detail.days.length} days</span>
+            </div>
+          </div>
+          <div style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
+            {detail.days.map((day, idx) => (
+              <div key={idx} style={{ background: COLORS.card, borderRadius: 12, marginBottom: 8, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+                <div onClick={() => toggleDay(idx)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", cursor: "pointer" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text }}>{day.dayLabel} — {day.name}</div>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>{day.exercises.length} exercises · {day.type}</div>
+                  </div>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>{expandedDays.has(idx) ? "▲" : "▼"}</span>
+                </div>
+                {expandedDays.has(idx) && (
+                  <div style={{ padding: "0 14px 12px", borderTop: `1px solid ${COLORS.border}` }}>
+                    {day.exercises.map((ex, ei) => (
+                      <div key={ei} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{ex.name}</span>
+                        <span style={{ fontSize: 12, color: COLORS.muted }}>{ex.sets}×{ex.reps}{ex.weight ? ` @ ${ex.weight}kg` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div style={{ height: 16 }} />
+          </div>
+          <div style={{ padding: "12px 20px calc(12px + env(safe-area-inset-bottom,0px))", flexShrink: 0, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 10 }}>
+            <button onClick={() => { onSaveRoutine({ ...detail, id: Date.now(), source: "example", created_at: new Date().toISOString() }); setDetail(null); onClose(); }}
+              style={{ flex: 1, padding: 12, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              Save to My Routines
+            </button>
+            <button onClick={() => setConfirmApply(detail)}
+              style={{ flex: 1, padding: 12, background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+              Apply to Week
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 510, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+        <div style={{ padding: "20px 20px 12px", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Explore Routines</h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+            {["All","Beginner","Intermediate","Advanced"].map(l => (
+              <button key={l} onClick={() => setFilters(f => ({ ...f, level: l }))} style={chip(filters.level === l, LEVEL_COLOR[l] || COLORS.accent)}>{l}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginTop: 6, scrollbarWidth: "none" }}>
+            {["All","Muscle Gain","Fat Loss","Endurance","General Fitness","Flexibility"].map(g => (
+              <button key={g} onClick={() => setFilters(f => ({ ...f, goal: g }))} style={chip(filters.goal === g, COLORS.accent)}>{g}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            {[["All","All"],["none","No Equip"],["minimal","Minimal"],["full","Full Gym"]].map(([val,label]) => (
+              <button key={val} onClick={() => setFilters(f => ({ ...f, equipment: val }))} style={chip(filters.equipment === val, EQUIP_COLOR[val] || COLORS.accent)}>{label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
+          {filtered.length === 0 && <div style={{ textAlign: "center", color: COLORS.muted, padding: 32, fontSize: 13 }}>No routines match these filters</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, paddingBottom: 20 }}>
+            {filtered.map(r => (
+              <div key={r.id} onClick={() => { setDetail(r); setExpandedDays(new Set()); }}
+                style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}`, cursor: "pointer" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text, marginBottom: 6, lineHeight: 1.3 }}>{r.name}</div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                  <span style={{ padding: "2px 7px", borderRadius: 6, background: (LEVEL_COLOR[r.level] || COLORS.accent) + "22", color: LEVEL_COLOR[r.level] || COLORS.accent, fontSize: 10, fontWeight: 700 }}>{r.level}</span>
+                  <span style={{ padding: "2px 7px", borderRadius: 6, background: (EQUIP_COLOR[r.equipment] || COLORS.accent) + "22", color: EQUIP_COLOR[r.equipment] || COLORS.accent, fontSize: 10, fontWeight: 700 }}>{EQUIP_LABEL[r.equipment]}</span>
+                </div>
+                <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 4 }}>{r.goal}</div>
+                <div style={{ fontSize: 11, color: COLORS.mutedLight, lineHeight: 1.4, marginBottom: 6 }}>{r.description}</div>
+                <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 700 }}>{r.days.length} days</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Routine Detail Sheet ─────────────────────────────────────────────────────
+
+function RoutineDetailSheet({ routine, onClose, onApplyToWeek, onDelete }) {
+  const [expandedDays, setExpandedDays] = useState(new Set());
+  const [confirmApply, setConfirmApply] = useState(false);
+  const toggleDay = (i) => setExpandedDays(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+  if (confirmApply) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 520, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "24px 24px calc(24px + env(safe-area-inset-bottom,0px))" }}>
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10, color: COLORS.text }}>Apply to This Week?</div>
+          <div style={{ fontSize: 14, color: COLORS.muted, marginBottom: 20, lineHeight: 1.5 }}>
+            This will replace your current weekly schedule with &quot;{routine.name}&quot;. Workout history is not affected.
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setConfirmApply(false)} style={{ flex: 1, padding: 13, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.mutedLight, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+            <button onClick={() => { onApplyToWeek(routine); onClose(); }} style={{ flex: 2, padding: 13, background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>Apply</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 520, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", maxHeight: "88vh" }}>
+        <div style={{ padding: "20px 20px 12px", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>{routine.name}</h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          {routine.description && <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>{routine.description}</div>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ padding: "3px 10px", borderRadius: 8, background: (LEVEL_COLOR[routine.level] || COLORS.accent) + "22", color: LEVEL_COLOR[routine.level] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{routine.level}</span>
+            <span style={{ padding: "3px 10px", borderRadius: 8, background: (EQUIP_COLOR[routine.equipment] || COLORS.accent) + "22", color: EQUIP_COLOR[routine.equipment] || COLORS.accent, fontSize: 11, fontWeight: 700 }}>{EQUIP_LABEL[routine.equipment] || routine.equipment}</span>
+            <span style={{ padding: "3px 10px", borderRadius: 8, background: COLORS.accentDim, color: COLORS.accent, fontSize: 11, fontWeight: 700 }}>{routine.goal}</span>
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
+          {(routine.days || []).map((day, idx) => (
+            <div key={idx} style={{ background: COLORS.card, borderRadius: 12, marginBottom: 8, overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+              <div onClick={() => toggleDay(idx)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text }}>{day.dayLabel || `Day ${idx+1}`} — {day.name || day.type}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>{day.exercises.length} exercises · {day.type}</div>
+                </div>
+                <span style={{ fontSize: 12, color: COLORS.muted }}>{expandedDays.has(idx) ? "▲" : "▼"}</span>
+              </div>
+              {expandedDays.has(idx) && (
+                <div style={{ padding: "0 14px 12px", borderTop: `1px solid ${COLORS.border}` }}>
+                  {day.exercises.map((ex, ei) => (
+                    <div key={ei} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{ex.name}</span>
+                      <span style={{ fontSize: 12, color: COLORS.muted }}>{ex.sets}×{ex.reps}{ex.weight ? ` @ ${ex.weight}kg` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          <div style={{ height: 16 }} />
+        </div>
+        <div style={{ padding: "12px 20px calc(12px + env(safe-area-inset-bottom,0px))", flexShrink: 0, borderTop: `1px solid ${COLORS.border}` }}>
+          <button onClick={() => setConfirmApply(true)}
+            style={{ width: "100%", padding: 12, background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
+            Apply to This Week
+          </button>
+          <button onClick={onDelete}
+            style={{ width: "100%", padding: 10, background: "none", border: `1px solid ${COLORS.warn}44`, borderRadius: 12, color: COLORS.warn, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Delete Routine
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Routine Day Modal ────────────────────────────────────────────────────────
+
+function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTemplate, onClose, onSave, onOpenExercisePicker }) {
   const [name, setName] = useState(existing?.name || "");
   const [type, setType] = useState(existing?.type || "Strength");
   const [exercises, setExercises] = useState(existing?.exercises || []);
@@ -952,7 +1880,13 @@ function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTem
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase" }}>Exercises</label>
-            <button onClick={addExercise} style={{ padding: "5px 10px", background: COLORS.accent + "22", border: `1px solid ${COLORS.accent}`, borderRadius: 8, color: COLORS.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add</button>
+            <div style={{ display: "flex", gap: 6 }}>
+              {onOpenExercisePicker && (
+                <button onClick={() => onOpenExercisePicker(exs => setExercises(prev => [...prev, ...exs.map(ex => ({ id: Date.now() + Math.random(), name: ex.name, sets: String(ex.defaultSets || 3), reps: ex.defaultReps || "10", weight: ex.defaultWeight || "" }))]))}
+                  style={{ padding: "5px 10px", background: COLORS.blue + "22", border: `1px solid ${COLORS.blue}`, borderRadius: 8, color: COLORS.blue, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Library</button>
+              )}
+              <button onClick={addExercise} style={{ padding: "5px 10px", background: COLORS.accent + "22", border: `1px solid ${COLORS.accent}`, borderRadius: 8, color: COLORS.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add</button>
+            </div>
           </div>
           {exercises.length === 0 && (
             <div style={{ textAlign: "center", padding: "12px 0", color: COLORS.muted, fontSize: 12 }}>No exercises yet — tap + Add to build your plan</div>
@@ -3439,6 +4373,78 @@ export default function App() {
           return merged;
         });
       });
+    supabase.from("routines").select("saved_routines, prs").eq("user_id", uid).single()
+      .then(({ data }) => {
+        if (!data) return;
+        if (data.saved_routines?.length) {
+          setSavedRoutines(prev => {
+            const dbIds = new Set(data.saved_routines.map(r => r.id));
+            const localOnly = prev.filter(r => !dbIds.has(r.id));
+            return [...data.saved_routines, ...localOnly];
+          });
+        }
+        if (data.prs && Object.keys(data.prs).length) {
+          setPrs(prev => ({ ...data.prs, ...prev }));
+        }
+      });
+    supabase.from("workouts").select("*").eq("user_id", uid).order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const fromDb = data.map(r => ({ id: r.id, type: r.type || "Strength", name: r.name || "Workout", duration: r.duration, calories: r.calories, sets: r.sets, date: r.date, exercises: r.exercises || [] }));
+        setWorkouts(prev => {
+          const dbIds = new Set(fromDb.map(w => w.id));
+          const localOnly = prev.filter(w => !dbIds.has(w.id));
+          return [...fromDb, ...localOnly].sort((a, b) => b.id - a.id);
+        });
+      });
+    supabase.from("injuries").select("*").eq("user_id", uid).order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const fromDb = data.map(r => ({ id: r.id, area: r.area, severity: r.severity, status: r.status || "new", note: r.note, date: r.date, log: r.log || [] }));
+        setInjuries(prev => {
+          const dbIds = new Set(fromDb.map(i => i.id));
+          const localOnly = prev.filter(i => !dbIds.has(i.id));
+          return [...fromDb, ...localOnly];
+        });
+      });
+    supabase.from("supplements").select("*").eq("user_id", uid)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const fromDb = data.map(r => ({ id: r.id, name: r.name, emoji: r.emoji || "💊", dose: r.dose, timing: r.timing, category: r.category, color: r.color, benefit: r.benefit, history: r.history || {} }));
+        setSupplements(prev => {
+          const dbIds = new Set(fromDb.map(s => s.id));
+          const localOnly = prev.filter(s => !dbIds.has(s.id));
+          return [...fromDb, ...localOnly];
+        });
+      });
+    supabase.from("sleep_log").select("*").eq("user_id", uid)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        setSleepLog(prev => {
+          const merged = { ...prev };
+          data.forEach(r => { if (!merged[r.date]) merged[r.date] = { hours: r.hours, quality: r.quality || "good" }; });
+          return merged;
+        });
+      });
+    supabase.from("weight_log").select("*").eq("user_id", uid)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        setWeightLog(prev => {
+          const merged = { ...prev };
+          data.forEach(r => { if (!merged[r.date]) merged[r.date] = r.weight; });
+          return merged;
+        });
+      });
+    supabase.from("progress_photos").select("*").eq("user_id", uid).order("date", { ascending: false })
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const fromDb = data.map(r => ({ id: r.id, date: r.date, date_str: r.date_str, weight: r.weight, notes: r.notes }));
+        setProgressPhotos(prev => {
+          const dbIds = new Set(fromDb.map(p => p.id));
+          const localOnly = prev.filter(p => !dbIds.has(p.id));
+          return [...fromDb, ...localOnly];
+        });
+      });
   }, [authSession?.user?.id]);
 
   // ── Onboarding ─────────────────────────────────────────────────────────────
@@ -3519,6 +4525,12 @@ export default function App() {
   const [routineChecks, setRoutineChecks] = useState(() => JSON.parse(localStorage.getItem("routineChecks") || "{}"));
   const [routineTemplates, setRoutineTemplates] = useState(() => JSON.parse(localStorage.getItem("nf_templates") || "[]"));
   const [showSessionStart, setShowSessionStart] = useState(false);
+  const [savedRoutines, setSavedRoutines] = useState(() => { try { return JSON.parse(localStorage.getItem("nf_saved_routines")) || []; } catch { return []; } });
+  const [showCreateRoutine, setShowCreateRoutine] = useState(false);
+  const [showExplore, setShowExplore] = useState(false);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [exercisePickerCtx, setExercisePickerCtx] = useState(null);
+  const [viewRoutine, setViewRoutine] = useState(null);
 
   // App-level workout session (persists across tab changes)
   const [activeSession, setActiveSession] = useState(null);
@@ -3614,6 +4626,19 @@ export default function App() {
   const todayDayKey = DAYS_MAP[new Date().getDay()].key;
   const todayRoutine = weeklyRoutine[todayDayKey];
 
+  const applyRoutineToWeek = (routine) => {
+    const WEEK_KEYS = ["mon","tue","wed","thu","fri","sat","sun"];
+    const patch = {};
+    (routine.days || []).slice(0, 7).forEach((day, i) => {
+      patch[WEEK_KEYS[i]] = {
+        name: day.name || day.dayLabel || day.type,
+        type: day.type,
+        exercises: (day.exercises || []).map(e => ({ id: Date.now() + Math.random(), name: e.name, sets: String(e.sets || 3), reps: String(e.reps || 10), weight: String(e.weight || "") })),
+      };
+    });
+    setWeeklyRoutine(prev => ({ ...prev, ...patch }));
+  };
+
   // Session timer — ticks every second while a session is active, auto-clears expired rest
   useEffect(() => {
     if (!activeSession) return;
@@ -3651,7 +4676,9 @@ export default function App() {
     setShowActiveWorkout(true);
   };
   const handleFinishSession = ({ durationMin, estCals, validExercises, totalSets }) => {
-    setWorkouts(prev => [{ id: Date.now(), type: activeSession.sessionType || "Strength", name: activeSession.sessionName || "Workout Session", duration: durationMin, calories: estCals, sets: totalSets, date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), exercises: validExercises }, ...prev]);
+    const newWorkout = { id: Date.now(), type: activeSession.sessionType || "Strength", name: activeSession.sessionName || "Workout Session", duration: durationMin, calories: estCals, sets: totalSets, date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), exercises: validExercises };
+    setWorkouts(prev => [newWorkout, ...prev]);
+    if (supabase && authSession?.user?.id) supabase.from("workouts").upsert({ ...newWorkout, user_id: authSession.user.id });
 
     // Detect new personal records
     const dateStr = todayKey;
@@ -3702,6 +4729,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem("nf_routine", JSON.stringify(weeklyRoutine)); }, [weeklyRoutine]);
   useEffect(() => { localStorage.setItem("routineChecks", JSON.stringify(routineChecks)); }, [routineChecks]);
   useEffect(() => { localStorage.setItem("nf_templates", JSON.stringify(routineTemplates)); }, [routineTemplates]);
+  useEffect(() => { localStorage.setItem("nf_saved_routines", JSON.stringify(savedRoutines)); }, [savedRoutines]);
   useEffect(() => {
     localStorage.setItem("nf_theme", isDark ? "dark" : "light");
     document.body.style.background = isDark ? DARK_COLORS.bg : LIGHT_COLORS.bg;
@@ -3730,6 +4758,32 @@ export default function App() {
   useEffect(() => { localStorage.setItem("nf_weight_log", JSON.stringify(weightLog)); }, [weightLog]);
   useEffect(() => { localStorage.setItem("nf_prs", JSON.stringify(prs)); }, [prs]);
   useEffect(() => { localStorage.setItem("nf_photos", JSON.stringify(progressPhotos)); }, [progressPhotos]);
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    supabase.from("routines").upsert({ user_id: authSession.user.id, saved_routines: savedRoutines, prs, updated_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) console.warn("Routines sync failed:", error.message); });
+  }, [savedRoutines, prs, authSession?.user?.id]);
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    const uid = authSession.user.id;
+    const rows = supplements.map(s => ({ id: s.id, user_id: uid, name: s.name, emoji: s.emoji || "💊", dose: s.dose, timing: s.timing, category: s.category, color: s.color, benefit: s.benefit, history: s.history || {} }));
+    if (!rows.length) return;
+    supabase.from("supplements").upsert(rows).then(({ error }) => { if (error) console.warn("Supplements sync failed:", error.message); });
+  }, [supplements, authSession?.user?.id]);
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    const uid = authSession.user.id;
+    const rows = Object.entries(sleepLog).map(([date, entry]) => ({ user_id: uid, date, hours: entry.hours, quality: entry.quality || "good" }));
+    if (!rows.length) return;
+    supabase.from("sleep_log").upsert(rows).then(({ error }) => { if (error) console.warn("Sleep sync failed:", error.message); });
+  }, [sleepLog, authSession?.user?.id]);
+  useEffect(() => {
+    if (!supabase || !authSession?.user?.id) return;
+    const uid = authSession.user.id;
+    const rows = Object.entries(weightLog).map(([date, weight]) => ({ user_id: uid, date, weight }));
+    if (!rows.length) return;
+    supabase.from("weight_log").upsert(rows).then(({ error }) => { if (error) console.warn("Weight sync failed:", error.message); });
+  }, [weightLog, authSession?.user?.id]);
 
   const waterToday = waterLog[todayKey] || 0;
 
@@ -4422,6 +5476,41 @@ export default function App() {
                 <button onClick={() => { if (activeSession) return; if (todayRoutine?.exercises?.length > 0) { setShowSessionStart(true); } else { startActiveSession(); } }} disabled={!!activeSession} style={{ padding: "8px 14px", background: activeSession ? COLORS.accentDim : COLORS.accent, color: activeSession ? COLORS.accent : "#000", border: activeSession ? `1px solid ${COLORS.accentMid}` : "none", borderRadius: 10, fontWeight: 800, fontSize: 12, cursor: activeSession ? "default" : "pointer" }}>{activeSession ? "● Active" : "▶ Start"}</button>
               </div>
             </div>
+            {/* My Routines */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ margin: 0, fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>My Routines</p>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setShowCreateRoutine(true)}
+                    style={{ padding: "5px 11px", background: COLORS.accentDim, border: `1px solid ${COLORS.accent}`, borderRadius: 9, color: COLORS.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Create</button>
+                  <button onClick={() => setShowExplore(true)}
+                    style={{ padding: "5px 11px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 9, color: COLORS.mutedLight, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Explore →</button>
+                </div>
+              </div>
+              {savedRoutines.length === 0 ? (
+                <div onClick={() => setShowCreateRoutine(true)}
+                  style={{ border: `1px dashed ${COLORS.border}`, borderRadius: 14, padding: "18px 16px", textAlign: "center", cursor: "pointer", color: COLORS.muted }}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>💪</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.mutedLight }}>Build your first routine</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>Tap to create a custom workout program</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+                  {savedRoutines.map(r => (
+                    <div key={r.id} onClick={() => setViewRoutine(r)}
+                      style={{ background: COLORS.card, borderRadius: 14, padding: 14, border: `1px solid ${COLORS.border}`, minWidth: 150, flexShrink: 0, cursor: "pointer" }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.text, marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{r.name}</div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                        <span style={{ padding: "2px 7px", borderRadius: 6, background: (LEVEL_COLOR[r.level] || COLORS.accent) + "22", color: LEVEL_COLOR[r.level] || COLORS.accent, fontSize: 10, fontWeight: 700 }}>{r.level || "—"}</span>
+                        <span style={{ padding: "2px 7px", borderRadius: 6, background: (EQUIP_COLOR[r.equipment] || COLORS.accent) + "22", color: EQUIP_COLOR[r.equipment] || COLORS.accent, fontSize: 10, fontWeight: 700 }}>{EQUIP_LABEL[r.equipment] || r.equipment || "—"}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: COLORS.muted }}>{(r.days || []).length} day{(r.days || []).length !== 1 ? "s" : ""}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Weekly Routine Planner */}
             <div style={{ marginBottom: 16 }}>
               <p style={{ margin: "0 0 8px", fontSize: 11, color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>Weekly Routine</p>
@@ -4533,7 +5622,7 @@ export default function App() {
                         )}
                         <button onClick={async e => { e.stopPropagation(); const r = await shareWorkout(buildShareText(w), w.name); if (r === "copied") { setShareToast(true); setTimeout(() => setShareToast(false), 2500); } }}
                           style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 13, cursor: "pointer", padding: 0, lineHeight: 1 }} title="Share workout">↗</button>
-                        <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete this session?")) setWorkouts(prev => prev.filter(x => x.id !== w.id)); }}
+                        <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete this session?")) { setWorkouts(prev => prev.filter(x => x.id !== w.id)); if (supabase && authSession?.user?.id) supabase.from("workouts").delete().eq("id", w.id).eq("user_id", authSession.user.id); } }}
                           style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 11, cursor: "pointer", padding: 0 }}>✕</button>
                       </div>
                     </div>
@@ -4614,7 +5703,7 @@ export default function App() {
               setMeals(prev => [...prev, meal]);
               if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
             }}
-            onAddWorkout={workout => setWorkouts(prev => [workout, ...prev])}
+            onAddWorkout={workout => { setWorkouts(prev => [workout, ...prev]); if (supabase && authSession?.user?.id) supabase.from("workouts").upsert({ ...workout, user_id: authSession.user.id }); }}
             onEditMeal={prefill => setEditMealPrefill(prefill)}
             onEditWorkout={prefill => setEditWorkoutPrefill(prefill)}
             todayMeals={todayMeals}
@@ -4921,8 +6010,8 @@ export default function App() {
             {progressSubTab === "photos" && (
               <PhotoCalendarPage
                 photos={progressPhotos}
-                onAdd={meta => setProgressPhotos(prev => [meta, ...prev])}
-                onDelete={id => { deletePhoto(id); setProgressPhotos(prev => prev.filter(p => p.id !== id)); }}
+                onAdd={meta => { setProgressPhotos(prev => [meta, ...prev]); if (supabase && authSession?.user?.id) supabase.from("progress_photos").upsert({ ...meta, user_id: authSession.user.id }); }}
+                onDelete={id => { deletePhoto(id); setProgressPhotos(prev => prev.filter(p => p.id !== id)); if (supabase && authSession?.user?.id) supabase.from("progress_photos").delete().eq("id", id).eq("user_id", authSession.user.id); }}
               />
             )}
             {progressSubTab === "insights" && (
@@ -4994,26 +6083,26 @@ export default function App() {
         if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
       }} />}
       {showActiveWorkout && activeSession && <ActiveWorkoutSession session={activeSession} setSession={setActiveSession} sessionElapsed={sessionElapsed} restLeft={restLeft} resting={resting} onFinish={handleFinishSession} onClose={() => setShowActiveWorkout(false)} />}
-      {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
+      {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => { setWorkouts(prev => [w, ...prev]); if (supabase && authSession?.user?.id) supabase.from("workouts").upsert({ ...w, user_id: authSession.user.id }); }} />}
       {editMealPrefill && <ManualMealModal initialValues={editMealPrefill} onClose={() => setEditMealPrefill(null)} onAdd={m => {
         const meal = { ...m, logged_date: todayKey };
         setMeals(prev => [...prev, meal]);
         if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
         setEditMealPrefill(null);
       }} />}
-      {editWorkoutPrefill && <QuickLogModal initialValues={editWorkoutPrefill} onClose={() => setEditWorkoutPrefill(null)} onAdd={w => { setWorkouts(prev => [w, ...prev]); setEditWorkoutPrefill(null); }} />}
-      {showRunTracker && <RunTracker profile={profile} hkAvailable={hkAvailable} onClose={() => setShowRunTracker(false)} onSave={w => setWorkouts(prev => [w, ...prev])} />}
+      {editWorkoutPrefill && <QuickLogModal initialValues={editWorkoutPrefill} onClose={() => setEditWorkoutPrefill(null)} onAdd={w => { setWorkouts(prev => [w, ...prev]); if (supabase && authSession?.user?.id) supabase.from("workouts").upsert({ ...w, user_id: authSession.user.id }); setEditWorkoutPrefill(null); }} />}
+      {showRunTracker && <RunTracker profile={profile} hkAvailable={hkAvailable} onClose={() => setShowRunTracker(false)} onSave={w => { setWorkouts(prev => [w, ...prev]); if (supabase && authSession?.user?.id) supabase.from("workouts").upsert({ ...w, user_id: authSession.user.id }); }} />}
       {showWeightModal && (
         <LogWeightModal
           unit={profile.weightUnit || "kg"}
           lastWeight={(() => { const e = Object.entries(weightLog).sort(([a],[b]) => b.localeCompare(a)); return e.length ? e[0][1] : (parseFloat(profile.weight) || null); })()}
           todayStr={todayKey}
           onClose={() => setShowWeightModal(false)}
-          onSave={(date, w) => setWeightLog(prev => ({ ...prev, [date]: w }))}
+          onSave={(date, w) => { setWeightLog(prev => ({ ...prev, [date]: w })); if (supabase && authSession?.user?.id) supabase.from("weight_log").upsert({ user_id: authSession.user.id, date, weight: w }); }}
         />
       )}
-      {showInjury && <AddInjuryModal onClose={() => setShowInjury(false)} onAdd={inj => setInjuries(prev => [inj, ...prev])} />}
-      {showAddSupp && <AddSupplementModal onClose={() => setShowAddSupp(false)} onAdd={s => setSupplements(prev => [...prev, s])} />}
+      {showInjury && <AddInjuryModal onClose={() => setShowInjury(false)} onAdd={inj => { setInjuries(prev => [inj, ...prev]); if (supabase && authSession?.user?.id) supabase.from("injuries").upsert({ ...inj, user_id: authSession.user.id }); }} />}
+      {showAddSupp && <AddSupplementModal onClose={() => setShowAddSupp(false)} onAdd={s => { setSupplements(prev => [...prev, s]); if (supabase && authSession?.user?.id) supabase.from("supplements").upsert({ ...s, user_id: authSession.user.id }); }} />}
       {showAddPR && (
         <AddPRModal
           todayStr={todayKey}
@@ -5043,8 +6132,39 @@ export default function App() {
           <span>New PR{prToast.length > 1 ? "s" : ""}! {prToast.slice(0, 2).join(", ")}{prToast.length > 2 ? ` +${prToast.length - 2}` : ""}</span>
         </div>
       )}
-      {editingInjury && <UpdateInjuryModal injury={editingInjury} onClose={() => setEditingInjury(null)} onUpdate={inj => { setInjuries(prev => prev.map(i => i.id === inj.id ? inj : i)); setEditingInjury(null); }} />}
-      {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }} />}
+      {editingInjury && <UpdateInjuryModal injury={editingInjury} onClose={() => setEditingInjury(null)} onUpdate={inj => { setInjuries(prev => prev.map(i => i.id === inj.id ? inj : i)); if (supabase && authSession?.user?.id) supabase.from("injuries").upsert({ ...inj, user_id: authSession.user.id }); setEditingInjury(null); }} />}
+      {routineDay && <RoutineDayModal day={routineDay.label} existing={weeklyRoutine[routineDay.key]} templates={routineTemplates} onSaveTemplate={t => setRoutineTemplates(prev => [...prev.filter(x => x.name !== t.name), t])} onDeleteTemplate={name => setRoutineTemplates(prev => prev.filter(t => t.name !== name))} onClose={() => setRoutineDay(null)} onSave={plan => { setWeeklyRoutine(r => ({ ...r, [routineDay.key]: plan })); setRoutineDay(null); }}
+        onOpenExercisePicker={(cb) => { setExercisePickerCtx({ onPick: cb, multiSelect: true }); setShowExercisePicker(true); }} />}
+      {showCreateRoutine && (
+        <CreateRoutineModal
+          onClose={() => setShowCreateRoutine(false)}
+          onSave={routine => setSavedRoutines(prev => [routine, ...prev])}
+          onOpenExercisePicker={(cb) => { setExercisePickerCtx({ onPick: cb, multiSelect: true }); setShowExercisePicker(true); }}
+        />
+      )}
+      {showExplore && (
+        <ExploreModal
+          onClose={() => setShowExplore(false)}
+          onSaveRoutine={r => setSavedRoutines(prev => [r, ...prev])}
+          onApplyToWeek={applyRoutineToWeek}
+        />
+      )}
+      {showExercisePicker && exercisePickerCtx && (
+        <ExercisePickerModal
+          prs={prs}
+          multiSelect={exercisePickerCtx.multiSelect}
+          onClose={() => { setShowExercisePicker(false); setExercisePickerCtx(null); }}
+          onPick={exercisePickerCtx.onPick}
+        />
+      )}
+      {viewRoutine && (
+        <RoutineDetailSheet
+          routine={viewRoutine}
+          onClose={() => setViewRoutine(null)}
+          onApplyToWeek={(r) => { applyRoutineToWeek(r); setViewRoutine(null); }}
+          onDelete={() => { setSavedRoutines(prev => prev.filter(r => r.id !== viewRoutine.id)); setViewRoutine(null); }}
+        />
+      )}
       {showSessionStart && todayRoutine && <SessionStartPrompt todayRoutine={todayRoutine} onClose={() => setShowSessionStart(false)} onUseRoutine={() => { setShowSessionStart(false); startActiveSession(todayRoutine.exercises, todayRoutine.name, todayRoutine.type); }} onFresh={() => { setShowSessionStart(false); startActiveSession(); }} />}
       {showOnboarding && <OnboardingModal onComplete={() => { localStorage.setItem("nf_onboarded", "1"); setShowOnboarding(false); }} />}
 
@@ -5083,7 +6203,7 @@ export default function App() {
         <LogSleepModal
           existing={sleepLog[todayKey] || sleepLog[yesterdayKey] || null}
           onClose={() => setShowSleep(false)}
-          onSave={entry => setSleepLog(prev => ({ ...prev, [todayKey]: entry }))}
+          onSave={entry => { setSleepLog(prev => ({ ...prev, [todayKey]: entry })); if (supabase && authSession?.user?.id) supabase.from("sleep_log").upsert({ user_id: authSession.user.id, date: todayKey, hours: entry.hours, quality: entry.quality || "good" }); }}
         />
       )}
     </div>
