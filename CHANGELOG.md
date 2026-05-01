@@ -1,9 +1,9 @@
-NourishFit Changelog
+VitalCenter Changelog
 
 v1.0.0 — HealthKit, GPS Running, Capacitor & 7 Feature Improvements (current)
 
 Native Health Integration
-  Capacitor setup (capacitor.config.ts, appId: com.nourishfit.app) — enables iOS/Android native builds
+  Capacitor setup (capacitor.config.ts, appId: com.vitalcenter.app) — enables iOS/Android native builds
   Apple HealthKit / Health Connect read sync via @capgo/capacitor-health: steps, active calories,
     heart rate, heart rate average, sleep (noon-to-noon window), distance
   Apple HealthKit write sync: completed GPS runs written back to Fitness app as workout + distance + calories

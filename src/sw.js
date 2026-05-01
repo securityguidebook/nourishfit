@@ -7,7 +7,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 self.addEventListener("push", event => {
   const data = event.data?.json() ?? {};
   event.waitUntil(
-    self.registration.showNotification(data.title ?? "NourishFit", {
+    self.registration.showNotification(data.title ?? "VitalCenter", {
       body:    data.body   ?? "",
       icon:    "/pwa-192x192.png",
       badge:   "/pwa-64x64.png",

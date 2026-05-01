@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import imageCompression from "browser-image-compression";
 import { savePhoto, loadPhoto, deletePhoto } from "./db.js";
 import { supabase, signIn, signUp, signOut, onAuthChange } from "./lib/supabase.js";
+import { analyzeImage, chatWithTools } from "./lib/ai.js";
 import { isHealthKitAvailable, requestHealthKitAuth, syncToday, saveRunToHealth } from "./lib/healthkit.js";
 import { scheduleAll, requestPermission, getPermission } from "./lib/notifications.js";
 import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
@@ -57,7 +58,7 @@ const COLORS = { ...DARK_COLORS };
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
 const ONBOARDING_STEPS = [
-  { icon: "💪", title: "Hey, Coach here.", body: "Welcome to NourishFit — I'll help you eat smarter, train harder, and track your transformation. Let me show you around real quick." },
+  { icon: "💪", title: "Hey, Coach here.", body: "Welcome to VitalCenter — I'll help you eat smarter, train harder, and track your transformation. Let me show you around real quick." },
   { icon: "◎", title: "Nutrition & Water", body: "Log meals by typing or snap a photo — I'll scan it and pull the macros instantly. Track your water intake right alongside it." },
   { icon: "△", title: "Training", body: "Plan your weekly routine, start live sessions with set tracking and rest timers, or quick-log cardio. Your full history lives here." },
   { icon: "✦", title: "Ask Me Anything", body: "The Coach tab is your AI trainer — form tips, training splits, recovery advice. Available 24/7, no appointment needed." },
@@ -195,7 +196,7 @@ function AuthScreen({ onAuth }) {
   return (
     <div style={{ minHeight: "100dvh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 24px calc(24px + env(safe-area-inset-bottom,0px))" }}>
       <div style={{ fontSize: 42, marginBottom: 8 }}>💪</div>
-      <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.text, marginBottom: 4 }}>NourishFit</div>
+      <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Space Mono',monospace", color: COLORS.text, marginBottom: 4 }}>VitalCenter</div>
       <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 36 }}>Your AI fitness & nutrition coach</div>
 
       <div style={{ width: "100%", maxWidth: 380 }}>
@@ -312,29 +313,19 @@ function CalorieBar({ consumed, goal }) {
 // ─── AI Photo Scanner ─────────────────────────────────────────────────────────
 
 function AIPhotoScanner({ onClose, onScan }) {
+  const [scanMode, setScanMode] = useState("photo"); // "photo" | "describe"
   const [phase, setPhase] = useState("idle");
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [describeText, setDescribeText] = useState("");
   const fileRef = useRef();
+  const cameraRef = useRef();
 
-  async function analyzeImage(base64Data) {
+  async function runAnalysis(base64OrNull, textOrNull) {
     setPhase("scanning");
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-opus-4-5", max_tokens: 600,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64Data } },
-            { type: "text", text: "You are a nutrition expert. Analyze this food image and estimate: 1) Food name/description 2) Calories 3) Protein (g) 4) Carbs (g) 5) Fat (g). Reply in JSON: {\"name\":\"...\",\"description\":\"...\",\"calories\":0,\"protein\":0,\"carbs\":0,\"fat\":0}" }
-          ]}]
-        })
-      });
-      const data = await resp.json();
-      const text = data.content[0].text;
-      const json = JSON.parse(text.match(/\{[\s\S]*\}/)[0]);
+      const json = await analyzeImage(base64OrNull, textOrNull);
       setResult(json);
       setPhase("done");
     } catch {
@@ -348,39 +339,102 @@ function AIPhotoScanner({ onClose, onScan }) {
     reader.onload = e => {
       const base64 = e.target.result.split(",")[1];
       setImagePreview(e.target.result);
-      analyzeImage(base64);
+      runAnalysis(base64, null);
     };
     reader.readAsDataURL(file);
   }
 
+  function handleDescribe() {
+    if (!describeText.trim()) return;
+    setImagePreview(null);
+    runAnalysis(null, describeText.trim());
+  }
+
+  function reset() {
+    setPhase("idle");
+    setResult(null);
+    setImagePreview(null);
+    setDescribeText("");
+  }
+
+  const tabStyle = active => ({
+    flex: 1, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none",
+    borderRadius: 10, background: active ? COLORS.accent : COLORS.bg,
+    color: active ? "#000" : COLORS.muted,
+  });
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "24px 24px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>📸 AI Meal Scanner</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
-        <p style={{ margin: "0 0 16px", fontSize: 12, color: COLORS.muted }}>Upload a food photo to estimate macros instantly</p>
-        {phase === "idle" && (
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-            onClick={() => fileRef.current.click()}
-            style={{ border: `2px dashed ${dragOver ? COLORS.accent : COLORS.border}`, borderRadius: 16, padding: 32, textAlign: "center", cursor: "pointer", background: dragOver ? COLORS.accentDim : "transparent" }}
-          >
-            <div style={{ fontSize: 36, marginBottom: 8 }}>🍽️</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text, marginBottom: 4 }}>Drop a food photo here</div>
-            <div style={{ fontSize: 11, color: COLORS.muted }}>or click to browse · JPG, PNG, WEBP</div>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleFile(e.target.files[0])} />
+
+        {/* Mode tabs — only shown in idle/error state */}
+        {(phase === "idle" || phase === "error") && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, background: COLORS.card, padding: 4, borderRadius: 12 }}>
+            <button style={tabStyle(scanMode === "photo")} onClick={() => { setScanMode("photo"); reset(); }}>📷 Photo</button>
+            <button style={tabStyle(scanMode === "describe")} onClick={() => { setScanMode("describe"); reset(); }}>✏️ Describe</button>
           </div>
         )}
+
+        {/* ── PHOTO MODE ── */}
+        {scanMode === "photo" && phase === "idle" && (
+          <div>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+              onClick={() => fileRef.current.click()}
+              style={{ border: `2px dashed ${dragOver ? COLORS.accent : COLORS.border}`, borderRadius: 16, padding: 28, textAlign: "center", cursor: "pointer", background: dragOver ? COLORS.accentDim : "transparent", marginBottom: 10 }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🍽️</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text, marginBottom: 4 }}>Drop a food photo here</div>
+              <div style={{ fontSize: 11, color: COLORS.muted }}>or click to browse · JPG, PNG, WEBP</div>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleFile(e.target.files[0])} />
+            </div>
+            {/* Native camera capture — opens camera directly on mobile/Capacitor */}
+            <button
+              onClick={() => cameraRef.current.click()}
+              style={{ width: "100%", padding: 12, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, color: COLORS.text, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              📷 Use Camera
+            </button>
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => handleFile(e.target.files[0])} />
+          </div>
+        )}
+
+        {/* ── DESCRIBE MODE ── */}
+        {scanMode === "describe" && phase === "idle" && (
+          <div>
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: COLORS.muted }}>Describe what you ate — the AI will estimate macros.</p>
+            <textarea
+              value={describeText}
+              onChange={e => setDescribeText(e.target.value)}
+              placeholder="e.g. 200g chicken breast with 1 cup white rice and steamed broccoli"
+              rows={4}
+              style={{ width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }}
+            />
+            <button
+              onClick={handleDescribe}
+              disabled={!describeText.trim()}
+              style={{ marginTop: 10, width: "100%", padding: 13, background: describeText.trim() ? COLORS.accent : COLORS.border, border: "none", borderRadius: 12, color: describeText.trim() ? "#000" : COLORS.muted, fontWeight: 800, fontSize: 14, cursor: describeText.trim() ? "pointer" : "default" }}
+            >
+              Analyse Macros
+            </button>
+          </div>
+        )}
+
+        {/* ── SCANNING ── */}
         {phase === "scanning" && (
           <div style={{ textAlign: "center", padding: 32 }}>
             {imagePreview && <img src={imagePreview} alt="preview" style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 12, marginBottom: 16 }} />}
             <div style={{ fontSize: 14, color: COLORS.mutedLight }}>Analysing macronutrients . . .</div>
           </div>
         )}
+
+        {/* ── RESULT ── */}
         {phase === "done" && result && (
           <div>
             {imagePreview && <img src={imagePreview} alt="preview" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 12, marginBottom: 16 }} />}
@@ -394,14 +448,19 @@ function AIPhotoScanner({ onClose, onScan }) {
                 </div>
               ))}
             </div>
-            <button onClick={() => { onScan(result); onClose(); }} style={{ width: "100%", padding: 14, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Log This Meal</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { onScan(result); onClose(); }} style={{ flex: 1, padding: 14, background: COLORS.accent, border: "none", borderRadius: 14, color: "#000", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Log This Meal</button>
+              <button onClick={reset} style={{ padding: "14px 16px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, color: COLORS.muted, fontSize: 13, cursor: "pointer" }}>↩</button>
+            </div>
           </div>
         )}
+
+        {/* ── ERROR ── */}
         {phase === "error" && (
           <div style={{ textAlign: "center", padding: 24 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
-            <div style={{ fontSize: 14, color: COLORS.warn }}>Could not analyse image. Try another photo.</div>
-            <button onClick={() => setPhase("idle")} style={{ marginTop: 16, padding: "10px 24px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, cursor: "pointer" }}>Try Again</button>
+            <div style={{ fontSize: 14, color: COLORS.warn }}>Could not analyse. Try a different photo or description.</div>
+            <button onClick={reset} style={{ marginTop: 16, padding: "10px 24px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, cursor: "pointer" }}>Try Again</button>
           </div>
         )}
       </div>
@@ -429,7 +488,7 @@ function downloadCSV(filename, headers, rows) {
 function buildShareText(w) {
   const isRun = w.type === "Run" || (w.distance && !w.exercises?.length);
   const icon = isRun ? "🏃" : w.type === "Mobility" ? "🧘" : "💪";
-  const lines = [`${icon} ${w.name} — NourishFit`];
+  const lines = [`${icon} ${w.name} — VitalCenter`];
 
   if (isRun && w.distance) {
     lines.push(`📍 ${w.distance} km · ⏱ ${w.duration} min · 💨 ${w.pace ?? ""}/${w.distance > 0 ? "km" : ""}`);
@@ -445,7 +504,7 @@ function buildShareText(w) {
       });
     }
   }
-  lines.push("", "Tracked with NourishFit 💚");
+  lines.push("", "Tracked with VitalCenter 💚");
   return lines.join("\n");
 }
 
@@ -612,8 +671,8 @@ function AddPRModal({ onClose, onSave, todayStr }) {
     onClose();
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "24px 24px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Log Personal Record</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted, lineHeight: 1 }}>×</button>
@@ -649,8 +708,14 @@ function AddPRModal({ onClose, onSave, todayStr }) {
 
 // ─── Quick Log Modal (cardio / manual entry) ──────────────────────────────────
 
-function QuickLogModal({ onClose, onAdd }) {
-  const [form, setForm] = useState({ type: "Cardio", name: "", duration: "", calories: "", distance: "" });
+function QuickLogModal({ onClose, onAdd, initialValues }) {
+  const [form, setForm] = useState({
+    type: initialValues?.type || "Cardio",
+    name: initialValues?.name || "",
+    duration: initialValues?.duration != null ? String(initialValues.duration) : "",
+    calories: initialValues?.calories != null ? String(initialValues.calories) : "",
+    distance: "",
+  });
   const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
   const handle = () => {
     if (!form.name.trim()) return;
@@ -658,8 +723,8 @@ function QuickLogModal({ onClose, onAdd }) {
     onClose();
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Quick Log</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -747,8 +812,8 @@ function UpdateInjuryModal({ injury, onClose, onUpdate }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{injury.area}</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -841,8 +906,8 @@ function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTem
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>{day} Plan</h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -941,7 +1006,86 @@ function RoutineDayModal({ day, existing, templates, onSaveTemplate, onDeleteTem
 
 // ─── AI Coach ─────────────────────────────────────────────────────────────────
 
-function AICoach() {
+const COACH_TOOLS = [
+  {
+    name: "log_meal",
+    description: "Log a meal to the nutrition tracker. Use when the user clearly describes food they ate. Estimate macros from standard nutritional data.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Descriptive meal name" },
+        calories: { type: "number", description: "kcal" },
+        protein: { type: "number", description: "grams" },
+        carbs: { type: "number", description: "grams" },
+        fat: { type: "number", description: "grams" },
+      },
+      required: ["name", "calories", "protein", "carbs", "fat"],
+    },
+  },
+  {
+    name: "log_workout",
+    description: "Log a completed workout. Use when the user describes exercises they have done.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Workout name" },
+        type: { type: "string", enum: ["Strength", "Cardio", "HIIT", "Mobility", "Sport", "Other"] },
+        duration: { type: "number", description: "Minutes (estimate if not stated)" },
+        calories: { type: "number", description: "Estimated kcal burned" },
+        intensity: { type: "string", enum: ["Low", "Moderate", "High", "Very High"] },
+        exercises: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              sets: { type: "array", items: { type: "object", properties: { reps: { type: "string" }, weight: { type: "string" } }, required: ["reps"] } },
+            },
+            required: ["name", "sets"],
+          },
+        },
+      },
+      required: ["name", "type", "exercises"],
+    },
+  },
+];
+
+function hrZone(bpm) {
+  if (bpm < 100) return "resting/low";
+  if (bpm < 140) return "moderate zone";
+  if (bpm < 160) return "aerobic zone";
+  return "high intensity zone";
+}
+
+function buildCoachSystemPrompt(profile, todayMeals, recentWorkouts, hkData) {
+  const totalCals = (todayMeals || []).reduce((s, m) => s + (m.calories || 0), 0);
+  const hrLine = hkData?.heartRate
+    ? `Today's average heart rate (Apple Health): ${hkData.heartRate} bpm — ${hrZone(hkData.heartRate)}.`
+    : "No heart rate data available today.";
+  const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const recentNames = (recentWorkouts || []).slice(0, 3).map(w => w.name).join(", ") || "none";
+
+  return `You are VitalCenter Coach, an expert AI fitness and nutrition coach. Today is ${today}.
+
+User: ${profile?.gender || "unknown"}, age ${profile?.age || "?"}, ${profile?.weight || "?"}${profile?.weightUnit || "kg"}, goal: ${profile?.goal || "maintain"}, activity: ${profile?.activityLevel || "moderate"}.
+Today's nutrition: ${totalCals} kcal across ${(todayMeals || []).length} meal(s).
+Recent workouts: ${recentNames}.
+${hrLine}
+
+You have two tools:
+- log_meal: call this when the user describes food they ate; estimate macros from standard nutrition data.
+- log_workout: call this when the user describes a completed workout or exercise.
+
+Rules:
+- When workout intensity is unclear and no high heart-rate data is available, ask one short follow-up: "How hard was it — easy, moderate, or hard?" before calling the tool.
+- If heart rate data shows aerobic/high-intensity zone (>150 bpm), use High or Very High intensity for any workout today.
+- Provide a brief, friendly response alongside or after a tool call.
+- Keep responses concise. Use emojis sparingly.`;
+}
+
+function AICoach({ onAddMeal, onAddWorkout, onEditMeal, onEditWorkout, todayMeals, recentWorkouts, profile, hkData, todayKey }) {
+  // messages: { role: "user"|"assistant", content: string }
+  //         | { role: "action", actionType: "meal"|"workout", data: {}, status: "pending"|"logged"|"dismissed" }
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -949,56 +1093,144 @@ function AICoach() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  function handleLog(idx) {
+    const action = messages[idx];
+    if (action.actionType === "meal") {
+      onAddMeal({
+        id: Date.now(),
+        name: action.data.name,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        calories: action.data.calories,
+        protein: action.data.protein,
+        carbs: action.data.carbs,
+        fat: action.data.fat,
+        img: "🍽️",
+        logged_date: todayKey,
+      });
+    } else {
+      onAddWorkout({
+        id: Date.now(),
+        type: action.data.type || "Strength",
+        name: action.data.name,
+        duration: action.data.duration || 0,
+        calories: action.data.calories || 0,
+        sets: (action.data.exercises || []).reduce((s, e) => s + (e.sets?.length || 0), 0),
+        date: new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }),
+        exercises: action.data.exercises || [],
+      });
+    }
+    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, status: "logged" } : m));
+  }
+
+  function handleEdit(idx) {
+    const action = messages[idx];
+    if (action.actionType === "meal") onEditMeal(action.data);
+    else onEditWorkout(action.data);
+    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, status: "dismissed" } : m));
+  }
+
+  function handleDismiss(idx) {
+    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, status: "dismissed" } : m));
+  }
+
   async function send() {
     if (!input.trim() || loading) return;
     const userMsg = { role: "user", content: input };
-    setMessages(prev => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
     setLoading(true);
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-opus-4-5", max_tokens: 500,
-          system: "You are NourishFit Coach, an expert fitness and nutrition AI. Give concise, practical advice. Use emojis sparingly.",
-          messages: [...messages, userMsg]
-        })
-      });
-      const data = await resp.json();
-      setMessages(prev => [...prev, { role: "assistant", content: data.content[0].text }]);
+      // Only send user/assistant messages to the API (filter out action cards)
+      const apiMessages = updatedMessages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const systemPrompt = buildCoachSystemPrompt(profile, todayMeals, recentWorkouts, hkData);
+      const { text, toolCalls } = await chatWithTools(apiMessages, COACH_TOOLS, systemPrompt);
+
+      const newEntries = [];
+      if (text) newEntries.push({ role: "assistant", content: text });
+      for (const tc of toolCalls) {
+        if (tc.name === "log_meal" || tc.name === "log_workout") {
+          newEntries.push({ role: "action", actionType: tc.name === "log_meal" ? "meal" : "workout", data: tc.input, status: "pending" });
+        }
+      }
+      if (newEntries.length === 0) {
+        newEntries.push({ role: "assistant", content: "Sorry, I couldn't get a response. Please try again." });
+      }
+      setMessages(prev => [...prev, ...newEntries]);
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I couldn't connect. Please try again." }]);
     }
     setLoading(false);
   }
 
+  const QUICK_PROMPTS = [
+    "Best pre-workout meal?",
+    "I just had oats with milk and banana",
+    "3 sets bicep curls 16kg",
+    "How much protein do I need?",
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 180px)" }}>
       <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, fontFamily: "'Space Mono', monospace" }}>✦ AI Coach</h2>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: COLORS.muted }}>Ask anything · Log what you learn</p>
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: COLORS.muted }}>Ask anything · describe a meal or workout to log it</p>
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
         {messages.length === 0 && (
           <div style={{ background: COLORS.card, borderRadius: 14, padding: 16, border: `1px solid ${COLORS.border}` }}>
-            <div style={{ fontSize: 13, color: COLORS.mutedLight }}>Ask about any exercise, form tip, or training question</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-              {["Best pre-workout meal?", "How to fix squat form?", "How much protein do I need?"].map(q => (
+            <div style={{ fontSize: 13, color: COLORS.mutedLight, marginBottom: 10 }}>Ask a question, or describe a meal/workout to log it instantly.</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {QUICK_PROMPTS.map(q => (
                 <button key={q} onClick={() => setInput(q)} style={{ fontSize: 11, padding: "5px 10px", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 99, color: COLORS.accent, cursor: "pointer" }}>{q}</button>
               ))}
             </div>
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? COLORS.accent : COLORS.card, color: m.role === "user" ? "#000" : COLORS.text, borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, border: m.role === "assistant" ? `1px solid ${COLORS.border}` : "none" }}>
-            {m.content}
-          </div>
-        ))}
+
+        {messages.map((m, i) => {
+          if (m.role === "action") {
+            if (m.status === "dismissed") return null;
+            if (m.status === "logged") return (
+              <div key={i} style={{ alignSelf: "flex-start", background: COLORS.accentDim, border: `1px solid ${COLORS.accentMid}`, borderRadius: 12, padding: "8px 14px", fontSize: 12, color: COLORS.accent }}>
+                ✓ {m.actionType === "meal" ? "Meal" : "Workout"} logged — {m.data.name}
+              </div>
+            );
+            // pending confirm card
+            const isMeal = m.actionType === "meal";
+            return (
+              <div key={i} style={{ alignSelf: "flex-start", maxWidth: "92%", background: COLORS.card, borderRadius: 16, padding: 14, border: `2px solid ${COLORS.accentMid}` }}>
+                <div style={{ fontSize: 11, color: COLORS.accent, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                  {isMeal ? "🍽 Ready to log" : "💪 Ready to log"}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>{m.data.name}</div>
+                <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10 }}>
+                  {isMeal
+                    ? `~${m.data.calories} kcal · ${m.data.protein}g P · ${m.data.carbs}g C · ${m.data.fat}g F`
+                    : [m.data.type, m.data.duration ? `~${m.data.duration} min` : null, m.data.intensity, m.data.exercises?.length ? `${m.data.exercises.length} exercise${m.data.exercises.length > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ")}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => handleLog(i)} style={{ flex: 1, padding: "9px 0", background: COLORS.accent, border: "none", borderRadius: 10, color: "#000", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Log it ✓</button>
+                  <button onClick={() => handleEdit(i)} style={{ padding: "9px 14px", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.text, fontSize: 13, cursor: "pointer" }}>Edit</button>
+                  <button onClick={() => handleDismiss(i)} style={{ padding: "9px 12px", background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 10, color: COLORS.muted, fontSize: 13, cursor: "pointer" }}>✕</button>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", background: m.role === "user" ? COLORS.accent : COLORS.card, color: m.role === "user" ? "#000" : COLORS.text, borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, border: m.role === "assistant" ? `1px solid ${COLORS.border}` : "none" }}>
+              {m.content}
+            </div>
+          );
+        })}
+
         {loading && <div style={{ alignSelf: "flex-start", background: COLORS.card, borderRadius: "16px 16px 16px 4px", padding: "10px 14px", fontSize: 13, color: COLORS.muted, border: `1px solid ${COLORS.border}` }}>Thinking . . .</div>}
         <div ref={bottomRef} />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask your coach . . ." style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 13, outline: "none" }} />
-        <button onClick={send} style={{ padding: "10px 16px", background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, cursor: "pointer" }}>↑</button>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask or describe a meal / workout . . ." style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 13, outline: "none" }} />
+        <button onClick={send} disabled={loading} style={{ padding: "10px 16px", background: COLORS.accent, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, cursor: loading ? "default" : "pointer", opacity: loading ? 0.5 : 1 }}>↑</button>
       </div>
     </div>
   );
@@ -1588,7 +1820,7 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
         const { meals, workouts, waterLog, weightLog, sleepLog, supplements, prs } = exportData;
 
         const exportMeals = () => downloadCSV(
-          "nourishfit-meals.csv",
+          "vitalcenter-meals.csv",
           ["Date", "Time", "Name", "Calories (kcal)", "Protein (g)", "Carbs (g)", "Fat (g)"],
           meals.map(m => [m.logged_date ?? "", m.time ?? "", m.name, m.calories, m.protein, m.carbs, m.fat])
         );
@@ -1602,27 +1834,27 @@ function ProfilePage({ profile, setProfile, isDark, onToggleTheme, onShowTutoria
               rows.push([w.date, w.name, w.type, w.duration, w.calories, "", ""]);
             }
           });
-          downloadCSV("nourishfit-workouts.csv",
+          downloadCSV("vitalcenter-workouts.csv",
             ["Date", "Session", "Type", "Duration (min)", "Est. Calories", "Exercise", "Sets"],
             rows.length ? rows : [["", "", "", "", "", "", ""]]);
         };
 
         const exportHealth = () => {
           const dates = [...new Set([...Object.keys(waterLog), ...Object.keys(weightLog), ...Object.keys(sleepLog)])].sort();
-          downloadCSV("nourishfit-health-metrics.csv",
+          downloadCSV("vitalcenter-health-metrics.csv",
             ["Date", `Weight (${profile.weightUnit})`, "Water (ml)", "Sleep (hours)", "Sleep Quality"],
             dates.map(d => [d, weightLog[d] ?? "", waterLog[d] ?? "", sleepLog[d]?.hours ?? "", sleepLog[d]?.quality ?? ""]));
         };
 
         const exportSupplements = () => {
           const allDates = [...new Set(supplements.flatMap(s => Object.keys(s.history || {})))].sort().slice(-30);
-          downloadCSV("nourishfit-supplements.csv",
+          downloadCSV("vitalcenter-supplements.csv",
             ["Supplement", "Dose", "Timing", ...allDates],
             supplements.map(s => [s.name, s.dose ?? "", s.timing ?? "", ...allDates.map(d => s.history?.[d] ? "1" : "0")]));
         };
 
         const exportPRs = () => downloadCSV(
-          "nourishfit-personal-records.csv",
+          "vitalcenter-personal-records.csv",
           ["Exercise", "Best 1RM (kg)", "Best Weight (kg)", "Best Reps", "Date"],
           Object.entries(prs).map(([name, r]) => [name, r.best1rm, r.bestWeight, r.bestReps, r.date ?? ""])
         );
@@ -1688,8 +1920,8 @@ function AddSupplementModal({ onClose, onAdd }) {
     onClose();
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "90vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Add Supplement</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -1920,9 +2152,16 @@ function FoodSearchModal({ onClose, onAdd }) {
 
 // ─── Manual Meal Modal ────────────────────────────────────────────────────────
 
-function ManualMealModal({ onClose, onAdd }) {
+function ManualMealModal({ onClose, onAdd, initialValues }) {
   const EMOJI_OPTIONS = ["🍗","🥩","🐟","🥗","🍝","🥣","🥤","🍳","🥙","🍱","🫐","🍎","🥑","🍌","🍽️"];
-  const [form, setForm] = useState({ name: "", img: "🍽️", calories: "", protein: "", carbs: "", fat: "" });
+  const [form, setForm] = useState({
+    name: initialValues?.name || "",
+    img: "🍽️",
+    calories: initialValues?.calories != null ? String(initialValues.calories) : "",
+    protein: initialValues?.protein != null ? String(initialValues.protein) : "",
+    carbs: initialValues?.carbs != null ? String(initialValues.carbs) : "",
+    fat: initialValues?.fat != null ? String(initialValues.fat) : "",
+  });
   const inputStyle = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 12px", color: COLORS.text, fontSize: 13, width: "100%", outline: "none", marginTop: 6 };
   const handle = () => {
     if (!form.name.trim() || !form.calories) return;
@@ -1930,8 +2169,8 @@ function ManualMealModal({ onClose, onAdd }) {
     onClose();
   };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "88vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Log Meal Manually</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -2018,8 +2257,8 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
   const cellInput = { background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "7px 6px", color: COLORS.text, fontSize: 13, textAlign: "center", outline: "none", width: "100%" };
 
   if (showSummary) return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "92vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "92vh", overflowY: "auto" }}>
         <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Session Complete 🏁</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           {[{ l: "Duration", v: `${durationMin}m`, c: COLORS.blue }, { l: "Est. Calories", v: `${estCals} kcal`, c: COLORS.yellow }, { l: "Exercises", v: validExercises.length, c: COLORS.accent }, { l: "Total Sets", v: totalSets, c: COLORS.purple }].map(x => (
@@ -2057,8 +2296,8 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
   );
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20, maxHeight: "92vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "92vh", overflowY: "auto" }}>
 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
@@ -2195,8 +2434,8 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
 function SessionStartPrompt({ todayRoutine, onUseRoutine, onFresh, onClose }) {
   const typeColor = ROUTINE_TYPE_COLOR[todayRoutine.type] || COLORS.accent;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: 20 }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Start Session</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -3259,6 +3498,8 @@ export default function App() {
   const [showActiveWorkout, setShowActiveWorkout] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [showRunTracker, setShowRunTracker] = useState(false);
+  const [editMealPrefill, setEditMealPrefill] = useState(null);
+  const [editWorkoutPrefill, setEditWorkoutPrefill] = useState(null);
   const [hkAvailable, setHkAvailable] = useState(false);
   const [hkData, setHkData] = useState({ steps: null, activeCalories: null, heartRate: null, distanceKm: null, sleepHours: null });
   const [hkSyncing, setHkSyncing] = useState(false);
@@ -3632,7 +3873,7 @@ export default function App() {
       <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: maxW, zIndex: 300, background: isDark ? "rgba(10,10,15,0.9)" : "rgba(242,242,247,0.9)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderBottom: `1px solid ${COLORS.border}` }}>
       <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 12px) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-          <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, fontFamily: "'Space Mono', monospace" }}>NourishFit</div>
+          <div style={{ fontSize: 11, color: COLORS.muted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, fontFamily: "'Space Mono', monospace" }}>VitalCenter</div>
           {tab === "dashboard" && (
             <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
               {profile.name ? `${greeting.text}, ${profile.name.split(" ")[0]}` : greeting.text}
@@ -4367,7 +4608,22 @@ export default function App() {
         )}
 
         {/* ── COACH ── */}
-        {tab === "coach" && <AICoach />}
+        {tab === "coach" && (
+          <AICoach
+            onAddMeal={meal => {
+              setMeals(prev => [...prev, meal]);
+              if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
+            }}
+            onAddWorkout={workout => setWorkouts(prev => [workout, ...prev])}
+            onEditMeal={prefill => setEditMealPrefill(prefill)}
+            onEditWorkout={prefill => setEditWorkoutPrefill(prefill)}
+            todayMeals={todayMeals}
+            recentWorkouts={workouts.slice(0, 5)}
+            profile={profile}
+            hkData={hkData}
+            todayKey={todayKey}
+          />
+        )}
 
         {/* ── SUPPLEMENTS ── */}
         {tab === "supplements" && (() => {
@@ -4739,6 +4995,13 @@ export default function App() {
       }} />}
       {showActiveWorkout && activeSession && <ActiveWorkoutSession session={activeSession} setSession={setActiveSession} sessionElapsed={sessionElapsed} restLeft={restLeft} resting={resting} onFinish={handleFinishSession} onClose={() => setShowActiveWorkout(false)} />}
       {showQuickLog && <QuickLogModal onClose={() => setShowQuickLog(false)} onAdd={w => setWorkouts(prev => [w, ...prev])} />}
+      {editMealPrefill && <ManualMealModal initialValues={editMealPrefill} onClose={() => setEditMealPrefill(null)} onAdd={m => {
+        const meal = { ...m, logged_date: todayKey };
+        setMeals(prev => [...prev, meal]);
+        if (supabase && authSession?.user?.id) supabase.from("meals").upsert({ ...meal, user_id: authSession.user.id });
+        setEditMealPrefill(null);
+      }} />}
+      {editWorkoutPrefill && <QuickLogModal initialValues={editWorkoutPrefill} onClose={() => setEditWorkoutPrefill(null)} onAdd={w => { setWorkouts(prev => [w, ...prev]); setEditWorkoutPrefill(null); }} />}
       {showRunTracker && <RunTracker profile={profile} hkAvailable={hkAvailable} onClose={() => setShowRunTracker(false)} onSave={w => setWorkouts(prev => [w, ...prev])} />}
       {showWeightModal && (
         <LogWeightModal

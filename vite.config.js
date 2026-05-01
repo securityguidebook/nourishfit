@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'logo.svg', 'apple-touch-icon-180x180.png', 'pwa-*.png', 'maskable-icon-512x512.png'],
       manifest: {
-        name: 'NourishFit',
-        short_name: 'NourishFit',
+        name: 'VitalCenter',
+        short_name: 'VitalCenter',
         description: 'AI-powered nutrition and fitness companion',
         theme_color: '#0a0a0f',
         background_color: '#0a0a0f',

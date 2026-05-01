@@ -1,4 +1,4 @@
-const DB_NAME = 'nourishfit';
+const DB_NAME = 'vitalcenter';
 const PHOTO_STORE = 'photos';
 const VERSION = 1;
 

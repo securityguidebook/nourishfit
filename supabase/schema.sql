@@ -1,4 +1,4 @@
--- NourishFit — Supabase Schema
+-- VitalCenter — Supabase Schema
 -- Run this in your Supabase SQL editor (Dashboard → SQL Editor → New query)
 
 -- ─── Profiles ─────────────────────────────────────────────────────────────────

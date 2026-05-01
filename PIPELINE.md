@@ -1,4 +1,4 @@
-NourishFit — Project Pipeline
+VitalCenter — Project Pipeline
 
 ✅ Shipped
 
