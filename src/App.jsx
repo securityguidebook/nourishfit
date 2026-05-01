@@ -2259,7 +2259,10 @@ function ActiveWorkoutSession({ session, setSession, sessionElapsed, restLeft, r
   if (showSummary) return (
     <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 500, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, margin: "0 auto", padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))", maxHeight: "92vh", overflowY: "auto" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Session Complete 🏁</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: "'Space Mono',monospace" }}>Session Complete 🏁</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           {[{ l: "Duration", v: `${durationMin}m`, c: COLORS.blue }, { l: "Est. Calories", v: `${estCals} kcal`, c: COLORS.yellow }, { l: "Exercises", v: validExercises.length, c: COLORS.accent }, { l: "Total Sets", v: totalSets, c: COLORS.purple }].map(x => (
             <div key={x.l} style={{ background: COLORS.card, borderRadius: 12, padding: 14, border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
